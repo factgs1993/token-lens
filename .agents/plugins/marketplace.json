@@ -1,0 +1,11 @@
+{
+  "name": "token-lens-local",
+  "plugins": [
+    {
+      "name": "codex-token-lens",
+      "source": { "source": "local", "path": "./adapters/codex/package" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
+  ]
+}
