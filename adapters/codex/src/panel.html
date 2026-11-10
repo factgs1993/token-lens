@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Расход токенов</title>
+  <style>/* STYLES */</style>
+</head>
+<body>
+  <main>
+    <header><div><div class="eyebrow">CODEX · ЛОКАЛЬНАЯ СТАТИСТИКА</div><h1>Расход токенов</h1></div><span class="live" id="live">Подключение…</span></header>
+    <p id="answer-title" class="muted"></p>
+    <p id="status" role="status">Подключение к Codex…</p>
+    <div id="report" hidden>
+      <div class="eyebrow">ФАКТИЧЕСКИЕ СЧЁТЧИКИ</div>
+      <section class="metrics" aria-label="Фактический расход">
+        <article class="metric primary"><span>Всего за ответ</span><strong id="total">—</strong><small>все запросы модели</small></article>
+        <article class="metric"><span>Вход</span><strong id="input">—</strong><small id="cached">—</small></article>
+        <article class="metric"><span>Выход</span><strong id="output">—</strong><small id="reasoning">включая рассуждения</small></article>
+      </section>
+      <section class="section"><div class="section-title"><h2>Что занимало вход</h2><span class="badge">Оценка</span></div><p class="muted">Видимый контекст на шагах ответа, ≈ UTF-8 байт / 3. Повторная передача учитывается на каждом шаге. Это не распределение фактического расхода API.</p><div id="stack" class="stack" aria-hidden="true"></div><div id="categories"></div></section>
+      <section class="section"><div class="section-title"><h2>Потребители: результаты инструментов</h2><span class="badge">Оценка входа</span></div><p class="muted">Входит в категорию «Результаты инструментов» выше. Вложенные инструменты внутри exec объединены под exec.</p><div id="consumers"></div></section>
+      <section class="section"><div class="section-title"><h2>Запросы модели</h2><span id="request-count" class="badge"></span></div><div class="table-wrap"><table><thead><tr><th>Шаг / модель</th><th>Вход</th><th>Кэш¹</th><th>Выход</th></tr></thead><tbody id="requests"></tbody></table></div><p class="muted">¹ Кэш уже входит во вход. Рассуждения уже входят в выход.</p></section>
+      <details><summary>Источник и точность</summary><p class="muted" id="source"></p><p class="muted">Скрытые инструкции, изменения схем, изображения и серверная подготовка контекста могут отсутствовать в журнале. Оценки категорий не обязаны совпадать с фактическими счётчиками. Формат журнала Codex может меняться.</p></details>
+    </div>
+  </main>
+  <script>/* APP */</script>
+</body>
+</html>
