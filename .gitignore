@@ -1,0 +1,7 @@
+**/node_modules/
+**/dist/
+**/package/
+**/test/panel-*.png
+*.log
+.env
+.env.*
