@@ -10,6 +10,7 @@ const first = { id: 'turn-1', label: '<img src=x onerror="alert(1)">', prompt: {
 const second = { ...first, id: 'turn-2', label: 'Второй запрос', prompt: { preview: 'Второй запрос', length: 13, truncated: false }, usage: { ...usage, input_tokens: 100, cached_input_tokens: 50, output_tokens: 25, total_tokens: 125 } };
 const missing = { ...first, id: 'turn-3', label: 'Нет счётчиков', prompt: null, hasUsage: false, status: 'running', requests: [] };
 const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionId: 'session-1', turnId: 'turn-1', source: 'token_usage_record', malformedLines: 0, turns: [first, second, missing], summary: { totals: { input_tokens: 12100, output_tokens: 925, total_tokens: 13025 }, turnCount: 3, measuredTurnCount: 2, missingUsageTurns: 1, runningTurns: 1 } };
+fixture.accountLimits = { state: 'ready', stale: false, fetchedAt: '2026-11-11T10:00:00Z', ordinaryUsageAllowed: true, pools: [{ id: 'codex', name: 'Codex', planType: 'plus', primary: { usedPercent: 25, remainingPercent: 75, windowMinutes: 300, resetsAt: 1794397755 }, secondary: { usedPercent: 60, remainingPercent: 40, windowMinutes: 10080, resetsAt: 1794483315 } }] };
 (async () => {
   const browser = await chromium.launch({ headless: true });
   let server;
@@ -40,6 +41,12 @@ const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionI
       assert.equal((await frame.locator('#share-button').textContent()).trim(), '');
       assert.equal(await frame.locator('#share-button svg').count(), 1);
       assert.equal(await frame.locator('#share-menu').isVisible(), false);
+      assert.ok((await frame.locator('#quota-summary').textContent()).includes('75%'));
+      assert.ok((await frame.locator('#quota-summary').textContent()).includes('40%'));
+      await frame.locator('#quota > summary').click();
+      assert.equal(await frame.locator('#quota [role="progressbar"]').count(), 2);
+      assert.equal(await frame.locator('#quota [role="progressbar"]').first().getAttribute('aria-valuenow'), '25');
+      await frame.locator('#quota > summary').click();
       await frame.locator('#share-button').click();
       assert.equal(await frame.locator('#share-button').getAttribute('aria-expanded'), 'true');
       assert.equal(await frame.locator('#share-menu [role="menuitem"]:visible').count(), 2);
@@ -58,7 +65,7 @@ const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionI
       assert.equal(await frame.locator('.prompt > summary').evaluate(el => el === document.activeElement), true);
       await frame.locator('#share-button').click(); await frame.locator('h1').click();
       assert.equal(await frame.locator('#share-menu').isVisible(), false);
-      await frame.locator('#share-button').click(); await frame.locator('#download-json').click();
+      await frame.locator('#share-button').click(); await frame.locator('#download-html').press('ArrowDown'); await frame.locator('#download-json').press(' ');
       await page.waitForFunction(() => window.openedLinks.length === 1);
       assert.equal((await page.evaluate(() => window.openedLinks))[0], 'http://127.0.0.1:38479/export.json?sessionId=session-1&turnId=turn-1');
       assert.equal(await frame.locator('#share-menu').isVisible(), false);
@@ -86,7 +93,7 @@ const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionI
       await page.screenshot({ path: `test/panel-${width}-${theme}.png`, fullPage: true });
       await page.close();
     }
-    server = createReportServer({ snapshot: (sessionId, turnId) => ({ ...fixture, sessionId, turnId }) }, path.join(__dirname, '../dist'));
+    server = createReportServer({ snapshot: (sessionId, turnId) => ({ ...fixture, sessionId, turnId }) }, path.join(__dirname, '../dist'), () => fixture.accountLimits);
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
     const page = await browser.newPage({ viewport: { width: 1100, height: 1400 } });
@@ -94,7 +101,9 @@ const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionI
     await page.goto(`${base}/answer?sessionId=session-1&turnId=turn-1`);
     await page.locator('#total').filter({ hasText: '12 900' }).waitFor();
     first.usage.output_tokens++; first.usage.total_tokens++; fixture.summary.totals.output_tokens++; fixture.summary.totals.total_tokens++;
+    fixture.accountLimits.pools[0].primary.usedPercent = 26; fixture.accountLimits.pools[0].primary.remainingPercent = 74;
     await page.locator('#total').filter({ hasText: '12 901' }).waitFor({ timeout: 10000 });
+    assert.ok((await page.locator('#quota-summary').textContent()).includes('74%'));
     await page.locator('#history > summary').click();
     await page.locator('[data-turn-id="turn-2"]').click();
     await page.locator('#share-button').click();
@@ -104,16 +113,29 @@ const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionI
     const htmlPending = page.waitForEvent('download'); await page.locator('#download-html').click(); const htmlDownload = await htmlPending;
     const offlinePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'token-lens-offline-')), 'report.html');
     await htmlDownload.saveAs(offlinePath);
+    const goodLimits = fixture.accountLimits;
+    fixture.accountLimits = { ...goodLimits, stale: true, error: 'Сервис временно недоступен' };
+    await page.locator('#quota-summary').filter({ hasText: 'устаревшие данные' }).waitFor({ timeout: 10000 });
+    assert.ok((await page.locator('#quota-summary').textContent()).includes('74%'));
+    fixture.accountLimits = { state: 'unavailable', pools: [], error: 'Лимиты временно недоступны' };
+    await page.locator('#quota-summary').filter({ hasText: 'Лимиты недоступны' }).waitFor({ timeout: 10000 });
+    assert.equal(await page.locator('#total').textContent(), '125');
+    fixture.accountLimits = goodLimits;
     await page.goto(`${base}/answer?sessionId=session-1&turnId=turn-2`);
     await page.locator('#total').filter({ hasText: '125' }).waitFor();
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.locator('#share-button').click();
     await page.screenshot({ path: 'test/panel-share-menu.png', clip: { x: 0, y: 0, width: 1100, height: 330 } });
+    await page.locator('#download-html').press('Escape');
+    await page.locator('#quota > summary').click();
+    await page.screenshot({ path: 'test/panel-account-limits.png', clip: { x: 0, y: 0, width: 1100, height: 690 } });
     await page.close();
     const offline = await browser.newPage({ viewport: { width: 1100, height: 1400 } });
     const requests = []; offline.on('request', request => requests.push(request.url())); offline.on('pageerror', error => errors.push(error.message));
     await offline.goto(pathToFileURL(offlinePath).href);
     await offline.locator('#total').filter({ hasText: '125' }).waitFor();
+    assert.ok((await offline.locator('#quota-title').textContent()).includes('на момент сохранения'));
+    assert.ok((await offline.locator('#quota-summary').textContent()).includes('74%'));
     assert.equal(await offline.locator('#live').textContent(), 'Сохранённый отчёт');
     await offline.locator('#history > summary').click(); await offline.locator('[data-turn-id="turn-1"]').click();
     assert.equal((await offline.locator('#total').textContent()).replace(/\s/g, ' '), '12 901');

@@ -8,6 +8,7 @@ const { spawnSync } = require('node:child_process');
 const { createStore } = require('../src/usage.cjs');
 const { createReportServer } = require('../src/report.cjs');
 const sessionId = '11111111-2222-3333-4444-555555555555';
+const metaName = `browser-server-${require('../package.json').version}.json`;
 function fixture() {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'token-lens-export-'));
   const dir = path.join(home, 'sessions'); fs.mkdirSync(dir);
@@ -24,7 +25,7 @@ function fixture() {
 }
 test('browser report and exports stay bound, escape prompt markup and expose no source files', async t => {
   const home = fixture(), store = createStore(home);
-  const server = createReportServer(store, path.join(__dirname, '../dist'));
+  const server = createReportServer(store, path.join(__dirname, '../dist'), () => ({ state: 'unavailable', pools: [], error: 'No test account' }));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -52,9 +53,9 @@ test('browser report and exports stay bound, escape prompt markup and expose no 
 });
 test('installed helper uses one configured link, switches without reinstalling and starts HTML only for browser mode', async t => {
   const home = fixture();
-  const env = { ...process.env, CODEX_HOME: home, CODEX_THREAD_ID: sessionId };
+  const env = { ...process.env, CODEX_HOME: home, CODEX_THREAD_ID: sessionId, TOKEN_LENS_CODEX_BIN: path.join(home, 'missing-test-cli') };
   t.after(async () => {
-    const file = path.join(home, 'token-lens/browser-server.json');
+    const file = path.join(home, 'token-lens', metaName);
     if (!fs.existsSync(file)) return;
     const meta = JSON.parse(fs.readFileSync(file));
     try {
@@ -70,7 +71,7 @@ test('installed helper uses one configured link, switches without reinstalling a
   assert.equal(link.turnId, 'second'); assert.ok(link.markdown.includes('[📊 Токены этого ответа](codex://'));
   assert.equal(link.view, 'mcp');
   assert.equal((link.markdown.match(/\]\(/g) || []).length, 1);
-  assert.equal(fs.existsSync(path.join(home, 'token-lens/browser-server.json')), false);
+  assert.equal(fs.existsSync(path.join(home, 'token-lens', metaName)), false);
   const config = path.join(home, 'token-lens/config.json');
   fs.writeFileSync(config, JSON.stringify({ reportView: 'browser' }));
   const helper = path.join(home, 'tools/token-usage-link.cjs');
