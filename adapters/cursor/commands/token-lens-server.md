@@ -5,12 +5,12 @@ description: Статус / старт / стоп локального UI-сер
 
 Управление локальным HTTP UI для ссылок «📊 Аналитика запроса/ответа».
 
-Выполни нужную команду и покажи JSON как есть:
+В PowerShell выполни нужную команду и покажи JSON как есть:
 
-- статус: `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\serve.cjs" --status`
-- старт: `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\serve.cjs" --start`
-- стоп: `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\serve.cjs" --stop`
-- рестарт: `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\serve.cjs" --restart`
+- статус: `node "$env:USERPROFILE\.cursor\plugins\local\cursor-token-lens\scripts\serve.cjs" --status`
+- старт: `node "$env:USERPROFILE\.cursor\plugins\local\cursor-token-lens\scripts\serve.cjs" --start`
+- стоп: `node "$env:USERPROFILE\.cursor\plugins\local\cursor-token-lens\scripts\serve.cjs" --stop`
+- рестарт: `node "$env:USERPROFILE\.cursor\plugins\local\cursor-token-lens\scripts\serve.cjs" --restart`
 
-Если `running: false` — сначала `--start`, затем открой `http://127.0.0.1:3847/`.
+Если пользователь просит запуск и `running: false`, выполни `--start`. После запрошенного `--stop` не запускай сервер снова автоматически. Открывай `http://127.0.0.1:3847/` только по просьбе пользователя.
 Не выдумывай статус.

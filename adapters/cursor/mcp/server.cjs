@@ -30,7 +30,7 @@ const server = new McpServer(
   { name: 'cursor-token-lens', version: '0.3.0' },
   {
     instructions:
-      'When this server is available, call token_usage_panel once near the end of each final answer and append the markdown from answer-link / tool result labelled «📊 Аналитика запроса/ответа». Do not invent token counts.',
+      'At the end of each final answer, run the bundled answer-link helper with the current conversation_id and append its complete markdown unchanged, including plan limits when enabled. Call token_usage_panel only when the user explicitly asks for the panel. Do not invent token counts or conversation IDs.',
   }
 );
 

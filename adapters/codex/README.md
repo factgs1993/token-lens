@@ -136,7 +136,10 @@ JSON результата содержит выбранный `view`, адрес
 
 ## Разработка и проверки
 
+Из папки `adapters/codex`:
+
 ```sh
+npm ci --ignore-scripts
 npm test
 npx playwright install chromium
 npm run test:ui

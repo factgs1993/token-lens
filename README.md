@@ -57,6 +57,7 @@ adapters/cursor/                  Hooks, MCP, HTML-отчёты и расшир�
 
 ```sh
 cd adapters/codex
+npm ci --ignore-scripts
 npm test
 npx playwright install chromium
 npm run test:ui
@@ -64,10 +65,16 @@ npm run test:ui
 
 Тесты проверяют счётчики и их изоляцию, чтение журналов, установщик глобального правила, совместимость адресов MCP и HTML-панель в Chromium. Проверка установленного плагина в самом харнесе выполняется отдельно.
 
-Для Cursor:
+Для Cursor, также из корня репозитория. UI-тест использует Playwright из адаптера Codex:
 
-```sh
-cd adapters/cursor
+```powershell
+cd adapters/codex
+npm ci --ignore-scripts
+npx playwright install chromium
+cd ../cursor
 npm ci --ignore-scripts
 npm test
+npm run test:ui
 ```
+
+В PowerShell, если выполнение `npm.ps1` или `npx.ps1` заблокировано, используйте `npm.cmd` и `npx.cmd`.

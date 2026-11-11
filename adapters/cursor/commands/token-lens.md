@@ -5,7 +5,9 @@ description: Показать расход токенов последнего �
 
 Покажи расход токенов последнего завершённого ответа агента.
 
-1. Выполни: `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\report.cjs"`
+Команда читает общий последний завершённый отчёт всех чатов. Для отчёта текущего чата используй `answer-link.cjs` с явным `conversation_id`, как указано в навыке `token-lens`.
+
+1. В PowerShell выполни: `node "$env:USERPROFILE\.cursor\plugins\local\cursor-token-lens\scripts\report.cjs"`
 2. Если команда упала — скажи, что отчёт появится после следующего завершённого хода (нужен hook `stop`).
 3. Верни отчёт как есть (markdown): фактический вход/выход и оценка потребителей по инструментам.
 4. Не выдумывай числа, если файла отчёта нет.

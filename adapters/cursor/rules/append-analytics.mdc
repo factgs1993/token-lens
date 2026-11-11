@@ -8,7 +8,7 @@ alwaysApply: true
 Как в Codex: в конце ответа — блок из `answer-link`, без второго агентного хода.
 
 1. Узнай id текущего чата (conversation / composer id, UUID).
-2. `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\answer-link.cjs" "<conversation_id>"`
+2. В PowerShell: `node "$env:USERPROFILE\.cursor\plugins\local\cursor-token-lens\scripts\answer-link.cjs" "<conversation_id>"`
    Опционально вторым аргументом: `generation_id` текущего хода.
 3. Append JSON field `markdown` unchanged as the **last lines** of the answer.
 4. Do not spawn or answer a follow-up that only repeats the link / stats.
