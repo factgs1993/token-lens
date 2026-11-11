@@ -5,8 +5,12 @@ alwaysApply: true
 
 # Аналитика запроса/ответа (Token Lens)
 
-Как в Codex: в конце ответа — **одна** markdown-ссылка, без второго агентного хода.
+Как в Codex: в конце ответа — блок из `answer-link`, без второго агентного хода.
 
-1. `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\answer-link.cjs"`
-2. Append JSON field `markdown` unchanged as the last line.
-3. Do not spawn or answer a follow-up that only repeats the link.
+1. Узнай id текущего чата (conversation / composer id, UUID).
+2. `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\answer-link.cjs" "<conversation_id>"`
+   Опционально вторым аргументом: `generation_id` текущего хода.
+3. Append JSON field `markdown` unchanged as the **last lines** of the answer.
+4. Do not spawn or answer a follow-up that only repeats the link / stats.
+5. Без `conversation_id` не вызывать — иначе возможен чужой чат.
+6. Не выдумывай цифры и URL — только поле `markdown` из JSON.

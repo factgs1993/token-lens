@@ -30,23 +30,69 @@ alwaysApply: true
 
 Как в Codex: в конце ответа — **одна markdown-ссылка**, без второго агентного хода.
 
-1. \`node "${helper.replace(/\\/g, '\\\\')}"\`
-2. Поле \`markdown\` из JSON допиши **последней строкой** ответа без изменений.
-3. Не вызывай отдельный follow-up и не повторяй ссылку вторым сообщением.
-4. MCP \`token_usage_panel\` — только если пользователь явно просит панель.
+1. Узнай id текущего чата (conversation / composer id, UUID).
+2. \`node "${helper.replace(/\\/g, '\\\\')}" "<conversation_id>"\`
+   Для привязки к ходу: вторым аргументом \`generation_id\`.
+3. Поле \`markdown\` из JSON допиши **последней строкой** ответа без изменений.
+4. Не вызывай отдельный follow-up и не повторяй ссылку вторым сообщением.
+5. MCP \`token_usage_panel\` — только если пользователь явно просит панель.
+6. Без \`conversation_id\` не вызывать — иначе возможен чужой чат из active.json.
 
 Не вставляй большую таблицу токенов вместо ссылки. Не выдумывай URL.
 `;
 
 let mcp = { mcpServers: {} };
 if (fs.existsSync(mcpPath)) {
+  const raw = fs.readFileSync(mcpPath, 'utf8');
   try {
-    mcp = JSON.parse(fs.readFileSync(mcpPath, 'utf8'));
-  } catch {
-    mcp = { mcpServers: {} };
+    mcp = JSON.parse(raw);
+  } catch (error) {
+    console.error(
+      JSON.stringify(
+        {
+          enabled: false,
+          error: 'mcp.json повреждён — установщик остановлен, файл не изменён',
+          mcpPath,
+          parseError: String(error && error.message ? error.message : error),
+        },
+        null,
+        2
+      )
+    );
+    process.exitCode = 1;
+    process.exit(1);
   }
 }
-if (!mcp.mcpServers || typeof mcp.mcpServers !== 'object') mcp.mcpServers = {};
+if (!mcp || typeof mcp !== 'object' || Array.isArray(mcp)) {
+  console.error(
+    JSON.stringify(
+      {
+        enabled: false,
+        error: 'mcp.json должен быть объектом — установщик остановлен, файл не изменён',
+        mcpPath,
+      },
+      null,
+      2
+    )
+  );
+  process.exit(1);
+}
+if (mcp.mcpServers == null) {
+  mcp.mcpServers = {};
+} else if (typeof mcp.mcpServers !== 'object' || Array.isArray(mcp.mcpServers)) {
+  console.error(
+    JSON.stringify(
+      {
+        enabled: false,
+        error: 'mcp.json: поле mcpServers битое — установщик остановлен, файл не изменён',
+        mcpPath,
+      },
+      null,
+      2
+    )
+  );
+  process.exit(1);
+}
 mcp.mcpServers['cursor-token-lens'] = {
   command: 'node',
   args: [server],

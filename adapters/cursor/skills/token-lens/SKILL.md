@@ -11,9 +11,10 @@ description: >-
 
 ## В конце каждого финального ответа
 
-1. Run `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\answer-link.cjs"`.
+1. Run `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\answer-link.cjs" "<conversation_id>"`.
 2. Append stdout JSON field `markdown` unchanged as the last lines of the answer.
-3. If MCP tool `token_usage_panel` is available, call it once in the same turn.
+3. Do not start follow-ups only to reprint usage.
+4. If MCP tool `token_usage_panel` is available and the user asked for the panel, call it once in the same turn.
 
 ## Source of truth
 
