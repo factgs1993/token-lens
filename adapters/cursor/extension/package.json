@@ -1,0 +1,34 @@
+{
+  "name": "cursor-token-lens",
+  "displayName": "Token Lens",
+  "description": "Per-chat token usage: status bar + panel (input/output/consumers)",
+  "version": "0.1.2",
+  "publisher": "owl-assist",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:tokenLens.openPanel",
+    "onCommand:tokenLens.refresh",
+    "onCommand:tokenLens.openLatest"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "tokenLens.openPanel",
+        "title": "Token Lens: Open Panel"
+      },
+      {
+        "command": "tokenLens.refresh",
+        "title": "Token Lens: Refresh"
+      },
+      {
+        "command": "tokenLens.openLatest",
+        "title": "Token Lens: Open Latest Report"
+      }
+    ]
+  }
+}
