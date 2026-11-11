@@ -16,7 +16,7 @@
 
 | Харнес | Состояние | Реализация |
 | --- | --- | --- |
-| Codex | Реализован локальный плагин MCP Apps, версия 0.1.3 | [adapters/codex](adapters/codex/) |
+| Codex | MCP Apps 0.2.0: отчёт ответа, превью запроса, история и итоги чата, резервный HTML и экспорт HTML/JSON | [adapters/codex](adapters/codex/) |
 | Cursor | Импортирована реализация плагина 0.2.0: hooks, MCP, локальные HTML-отчёты и исходники IDE-расширения | [adapters/cursor](adapters/cursor/) |
 | OpenCode | Планируется; адаптер ещё не реализован | Потребуется источник usage OpenCode и его собственная интеграция интерфейса |
 
