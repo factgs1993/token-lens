@@ -6,6 +6,7 @@ const os = require('node:os');
 
 const DATA_DIR = path.join(os.homedir(), '.cursor', 'token-lens');
 const PENDING_PATH = path.join(DATA_DIR, 'pending.json');
+const PROMPT_PATH = path.join(DATA_DIR, 'current-prompt.json');
 const LATEST_JSON = path.join(DATA_DIR, 'latest.json');
 const LATEST_MD = path.join(DATA_DIR, 'latest.md');
 const LOG_PATH = path.join(DATA_DIR, 'usage.jsonl');
@@ -96,6 +97,8 @@ function emptyPending(conversationId) {
   return {
     conversation_id: conversationId || null,
     started_at: new Date().toISOString(),
+    prompt_preview: null,
+    prompt_length: 0,
     consumers: {},
     categories: {
       tool_results: 0,
@@ -103,6 +106,49 @@ function emptyPending(conversationId) {
     },
     tools: [],
   };
+}
+
+function promptPreview(value, limit = 200) {
+  const text = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+  if (!text) return { preview: null, length: 0 };
+  return {
+    preview: text.length > limit ? `${text.slice(0, limit)}…` : text,
+    length: text.length,
+  };
+}
+
+function extractPromptText(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  const candidates = [
+    payload.prompt,
+    payload.content,
+    payload.text,
+    payload.message,
+    payload.user_prompt,
+    payload.input,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value;
+    if (value && typeof value === 'object') {
+      if (typeof value.text === 'string' && value.text.trim()) return value.text;
+      if (typeof value.content === 'string' && value.content.trim()) return value.content;
+      if (Array.isArray(value.content)) {
+        const joined = value.content
+          .map((part) => (typeof part === 'string' ? part : part && typeof part.text === 'string' ? part.text : ''))
+          .filter(Boolean)
+          .join('\n');
+        if (joined.trim()) return joined;
+      }
+    }
+  }
+  if (Array.isArray(payload.messages)) {
+    const lastUser = [...payload.messages].reverse().find((row) => row && (row.role === 'user' || row.type === 'user'));
+    if (lastUser) {
+      if (typeof lastUser.content === 'string') return lastUser.content;
+      if (typeof lastUser.text === 'string') return lastUser.text;
+    }
+  }
+  return '';
 }
 
 function add(map, key, value) {
@@ -244,6 +290,7 @@ function renderMarkdown(report) {
 module.exports = {
   DATA_DIR,
   PENDING_PATH,
+  PROMPT_PATH,
   LATEST_JSON,
   LATEST_MD,
   LOG_PATH,
@@ -258,6 +305,8 @@ module.exports = {
   appendJsonl,
   measuredFromPayload,
   emptyPending,
+  promptPreview,
+  extractPromptText,
   add,
   rank,
   saveTurn,

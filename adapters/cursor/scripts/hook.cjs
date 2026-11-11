@@ -1,9 +1,9 @@
 'use strict';
 
 const fs = require('node:fs');
-const path = require('node:path');
 const {
   PENDING_PATH,
+  PROMPT_PATH,
   LATEST_JSON,
   LATEST_MD,
   LOG_PATH,
@@ -15,16 +15,15 @@ const {
   appendJsonl,
   measuredFromPayload,
   emptyPending,
+  promptPreview,
+  extractPromptText,
   add,
   rank,
   saveTurn,
   renderMarkdown,
 } = require('./lib.cjs');
 const { writeAnswerPage } = require('./answer-page.cjs');
-
-function followupEnabled() {
-  return process.env.TOKEN_LENS_FOLLOWUP !== '0';
-}
+const { ensureServerSync } = require('./serve.cjs');
 
 function readStdin() {
   return new Promise((resolve, reject) => {
@@ -37,6 +36,31 @@ function readStdin() {
 
 function reply(obj) {
   process.stdout.write(JSON.stringify(obj || {}));
+}
+
+function savePrompt(conversationId, payload) {
+  const preview = promptPreview(extractPromptText(payload));
+  const record = {
+    conversation_id: conversationId || null,
+    at: new Date().toISOString(),
+    prompt_preview: preview.preview,
+    prompt_length: preview.length,
+    payload_keys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 40) : [],
+  };
+  writeJson(PROMPT_PATH, record);
+  return record;
+}
+
+function readSavedPrompt(conversationId) {
+  const saved = readJson(PROMPT_PATH, null);
+  if (!saved || !saved.prompt_preview) return { prompt_preview: null, prompt_length: 0 };
+  if (conversationId && saved.conversation_id && saved.conversation_id !== conversationId) {
+    return { prompt_preview: null, prompt_length: 0 };
+  }
+  return {
+    prompt_preview: saved.prompt_preview,
+    prompt_length: saved.prompt_length || 0,
+  };
 }
 
 async function main() {
@@ -59,13 +83,32 @@ async function main() {
   const conversationId = payload.conversation_id || payload.session_id || null;
 
   try {
+    if (event === 'sessionStart' || event === 'workspaceOpen') {
+      try {
+        ensureServerSync();
+      } catch (error) {
+        process.stderr.write(`[cursor-token-lens] ensureServer: ${error && error.message ? error.message : error}\n`);
+      }
+      reply({});
+      return;
+    }
+
     if (event === 'beforeSubmitPrompt') {
-      writeJson(PENDING_PATH, emptyPending(conversationId));
+      const pending = emptyPending(conversationId);
+      const saved = savePrompt(conversationId, payload);
+      pending.prompt_preview = saved.prompt_preview;
+      pending.prompt_length = saved.prompt_length;
+      writeJson(PENDING_PATH, pending);
       if (conversationId) {
         writeJson(ACTIVE_PATH, {
           conversation_id: conversationId,
           at: new Date().toISOString(),
         });
+      }
+      try {
+        ensureServerSync();
+      } catch {
+        /* non-fatal */
       }
       reply({});
       return;
@@ -74,7 +117,19 @@ async function main() {
     if (event === 'postToolUse') {
       const pending = readJson(PENDING_PATH, emptyPending(conversationId));
       if (conversationId && pending.conversation_id && pending.conversation_id !== conversationId) {
-        Object.assign(pending, emptyPending(conversationId));
+        const kept = {
+          prompt_preview: pending.prompt_preview,
+          prompt_length: pending.prompt_length,
+        };
+        Object.assign(pending, emptyPending(conversationId), {
+          prompt_preview: kept.prompt_preview || readSavedPrompt(conversationId).prompt_preview,
+          prompt_length: kept.prompt_length || readSavedPrompt(conversationId).prompt_length,
+        });
+      }
+      if (!pending.prompt_preview) {
+        const saved = readSavedPrompt(conversationId);
+        pending.prompt_preview = saved.prompt_preview;
+        pending.prompt_length = saved.prompt_length;
       }
       pending.conversation_id = conversationId || pending.conversation_id;
       const name = String(payload.tool_name || 'tool');
@@ -96,6 +151,7 @@ async function main() {
 
     if (event === 'stop') {
       const pending = readJson(PENDING_PATH, emptyPending(conversationId));
+      const savedPrompt = readSavedPrompt(conversationId || pending.conversation_id);
       const measured = measuredFromPayload(payload);
       const report = {
         at: new Date().toISOString(),
@@ -103,6 +159,8 @@ async function main() {
         generation_id: payload.generation_id || null,
         model: payload.model || payload.model_id || null,
         status: payload.status || null,
+        prompt_preview: pending.prompt_preview || savedPrompt.prompt_preview || null,
+        prompt_length: pending.prompt_length || savedPrompt.prompt_length || 0,
         measured,
         categories: pending.categories || {},
         consumers: rank(pending.consumers || {}),
@@ -114,26 +172,7 @@ async function main() {
       appendJsonl(LOG_PATH, report);
       saveTurn(report);
       writeJson(PENDING_PATH, emptyPending(conversationId));
-
-      // Codex-style: one markdown link to a per-answer detail page (not a dumped table).
-      const loopCount = Number(payload.loop_count) || 0;
-      const page = writeAnswerPage(report);
-      if (followupEnabled() && loopCount === 0 && payload.status !== 'aborted') {
-        writeJson(path.join(DATA_DIR, 'last-followup.json'), {
-          at: report.at,
-          conversation_id: report.conversation_id,
-          generation_id: report.generation_id,
-          url: page.url,
-          markdown: page.markdown,
-        });
-        reply({
-          followup_message:
-            'Покажи пользователю ТОЛЬКО следующую markdown-ссылку на аналитику этого ответа — без вступления, без инструментов и без другого текста:\n\n' +
-            page.markdown,
-        });
-        return;
-      }
-
+      writeAnswerPage(report);
       reply({});
       return;
     }
@@ -141,6 +180,15 @@ async function main() {
     reply({});
   } catch (error) {
     process.stderr.write(`[cursor-token-lens] ${error && error.message ? error.message : error}\n`);
+    try {
+      writeJson(require('node:path').join(DATA_DIR, 'hook-error.json'), {
+        at: new Date().toISOString(),
+        event,
+        message: String(error && error.message ? error.message : error),
+      });
+    } catch {
+      /* ignore */
+    }
     reply({});
   }
 }

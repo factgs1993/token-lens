@@ -8,7 +8,7 @@ const {
   formatNum,
   writeJson,
 } = require('./lib.cjs');
-const { ensureServer, answerUrl } = require('./serve.cjs');
+const { ensureServerSync, answerUrl } = require('./serve.cjs');
 
 const ANSWERS_DIR = path.join(DATA_DIR, 'answers');
 
@@ -74,7 +74,10 @@ function renderAnswerHtml(report) {
     .row i { width:8px; height:8px; border-radius:99px; background:var(--accent); }
     .track { grid-column:2 / -1; height:4px; background:var(--line); border-radius:99px; overflow:hidden; }
     .track span { display:block; height:100%; }
-    details { margin-top:18px; color:var(--muted); }
+    details { margin-top:12px; color:var(--muted); }
+    details.prompt { margin:10px 0 16px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
+    details.prompt summary { cursor:pointer; color:var(--fg); font-weight:600; }
+    details.prompt pre { white-space:pre-wrap; margin:8px 0 4px; color:var(--muted); font:12px/1.45 ui-monospace,Consolas,monospace; }
   </style>
 </head>
 <body>
@@ -86,6 +89,11 @@ function renderAnswerHtml(report) {
       · модель <code>${escapeHtml(report.model || '—')}</code>
       · ${escapeHtml(report.status || 'completed')}
       · ${escapeHtml(report.at || '')}</p>
+
+    <details class="prompt">
+      <summary>Запрос${report.prompt_length ? ` · ${escapeHtml(String(report.prompt_length))} символов` : ''} <span class="badge">первые 200</span></summary>
+      <pre>${escapeHtml(report.prompt_preview || 'Текст запроса для этого хода не попал в stop (хук beforeSubmitPrompt не сработал или preview сбросили до записи страницы).')}</pre>
+    </details>
 
     <div class="eyebrow">Фактические счётчики (stop)</div>
     <section class="metrics" aria-label="Фактический расход">
@@ -118,10 +126,25 @@ function writeAnswerPage(report) {
   const key = answerKey(report);
   const htmlPath = path.join(ANSWERS_DIR, `${key}.html`);
   const jsonPath = path.join(ANSWERS_DIR, `${key}.json`);
+  // Don't wipe a previously saved prompt when regenerating the same answer page.
+  if (!report.prompt_preview && fs.existsSync(jsonPath)) {
+    try {
+      const prev = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      if (prev && prev.prompt_preview) {
+        report = {
+          ...report,
+          prompt_preview: prev.prompt_preview,
+          prompt_length: prev.prompt_length || report.prompt_length || 0,
+        };
+      }
+    } catch {
+      /* ignore */
+    }
+  }
   fs.writeFileSync(htmlPath, renderAnswerHtml(report));
   writeJson(jsonPath, report);
   // Cursor opens file:// as source in the editor — serve over localhost for real UI.
-  const server = ensureServer();
+  const server = ensureServerSync();
   const url = answerUrl(key);
   const markdown = `[📊 Аналитика запроса/ответа](${url})`;
   writeJson(path.join(DATA_DIR, 'last-answer-link.json'), {

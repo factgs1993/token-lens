@@ -6,29 +6,36 @@ const path = require('node:path');
 
 const pluginRoot = path.join(__dirname, '..');
 const helper = path.join(pluginRoot, 'scripts', 'answer-link.cjs');
+const serveScript = path.join(pluginRoot, 'scripts', 'serve.cjs');
 const server = path.join(pluginRoot, 'mcp', 'server.cjs');
 const mcpPath = path.join(os.homedir(), '.cursor', 'mcp.json');
 const rulesDir = path.join(os.homedir(), '.cursor', 'rules');
 const rulePath = path.join(rulesDir, 'token-lens-analytics.mdc');
+const startupDir = path.join(
+  process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
+  'Microsoft',
+  'Windows',
+  'Start Menu',
+  'Programs',
+  'Startup'
+);
+const startupCmd = path.join(startupDir, 'token-lens-server.cmd');
 
 const rule = `---
-description: В конце каждого финального ответа добавлять аналитику токенов как в Codex
+description: В конце каждого финального ответа добавлять ссылку на аналитику токенов как в Codex
 alwaysApply: true
 ---
 
 # Аналитика запроса/ответа (Token Lens)
 
-В конце каждого финального ответа добавь блок аналитики токенов (аналог Codex «Токены этого ответа»).
+Как в Codex: в конце ответа — **одна markdown-ссылка**, без второго агентного хода.
 
-1. Один раз выполни:
+1. \`node "${helper.replace(/\\/g, '\\\\')}"\`
+2. Поле \`markdown\` из JSON допиши **последней строкой** ответа без изменений.
+3. Не вызывай отдельный follow-up и не повторяй ссылку вторым сообщением.
+4. MCP \`token_usage_panel\` — только если пользователь явно просит панель.
 
-\`\`\`text
-node "${helper.replace(/\\/g, '\\\\')}"
-\`\`\`
-
-2. Поле \`markdown\` из JSON допиши **последними строками** ответа без правок.
-3. Если доступен MCP \`token_usage_panel\` (\`cursor-token-lens\`) — вызови его один раз в этом ходу.
-4. Не выдумывай числа. Не копируй блок от прошлого ответа.
+Не вставляй большую таблицу токенов вместо ссылки. Не выдумывай URL.
 `;
 
 let mcp = { mcpServers: {} };
@@ -50,15 +57,25 @@ fs.writeFileSync(mcpPath, JSON.stringify(mcp, null, 2) + '\n');
 fs.mkdirSync(rulesDir, { recursive: true });
 fs.writeFileSync(rulePath, rule);
 
-// Ensure local UI server (http://127.0.0.1:3847) so links open rendered HTML, not source.
+// Autostart on Windows logon.
+let startup = null;
 try {
-  require('./serve.cjs').ensureServer();
-} catch {
-  // non-fatal
+  fs.mkdirSync(startupDir, { recursive: true });
+  const cmd = `@echo off\r\nnode "${serveScript}" --start >nul 2>nul\r\n`;
+  fs.writeFileSync(startupCmd, cmd, 'utf8');
+  startup = startupCmd;
+} catch (error) {
+  startup = { error: error.message };
 }
 
-// Keep MCP only in ~/.cursor/mcp.json (User). Do not also ship plugin mcp.json —
-// Cursor would show two identical "cursor-token-lens" servers (User + Plugin).
+// Start now + keep only User MCP.
+let serverStatus = null;
+try {
+  serverStatus = require('./serve.cjs').ensureServerSync();
+} catch (error) {
+  serverStatus = { ok: false, error: error.message };
+}
+
 console.log(
   JSON.stringify(
     {
@@ -67,7 +84,9 @@ console.log(
       rulePath,
       helper,
       server,
-      note: 'Single User MCP entry only. Reload MCP. Do not re-add plugin mcp.json.',
+      startup,
+      serverStatus,
+      note: 'Server autostarts on Windows logon + Cursor workspaceOpen/sessionStart/beforeSubmitPrompt.',
     },
     null,
     2

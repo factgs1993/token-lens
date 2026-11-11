@@ -62,8 +62,8 @@ function main() {
   }
 
   // In-flight: point at last completed answer page if any, else server index.
-  const { ensureServer, baseUrl, answerUrl } = require('./serve.cjs');
-  ensureServer();
+  const { ensureServerSync, baseUrl, answerUrl } = require('./serve.cjs');
+  ensureServerSync();
   let url = `${baseUrl()}/`;
   if (lastTurn && lastTurn.generation_id) {
     const page = writeAnswerPage(lastTurn);
