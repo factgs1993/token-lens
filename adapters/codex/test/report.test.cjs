@@ -50,7 +50,7 @@ test('browser report and exports stay bound, escape prompt markup and expose no 
   const missing = await (await fetch(base + '/api/report' + query.replace('first', 'second'))).json();
   assert.equal(missing.turns.find(turn => turn.id === 'second').hasUsage, false);
 });
-test('installed answer helper starts its independent browser runtime and keeps the latest turn ID', async t => {
+test('installed helper uses one configured link, switches without reinstalling and starts HTML only for browser mode', async t => {
   const home = fixture();
   const env = { ...process.env, CODEX_HOME: home, CODEX_THREAD_ID: sessionId };
   t.after(async () => {
@@ -68,7 +68,28 @@ test('installed answer helper starts its independent browser runtime and keeps t
   assert.equal(run.status, 0, run.stderr);
   const link = JSON.parse(run.stdout);
   assert.equal(link.turnId, 'second'); assert.ok(link.markdown.includes('[📊 Токены этого ответа](codex://'));
-  assert.ok(link.markdown.includes(`[HTML](${link.htmlUrl})`));
-  const data = await (await fetch(link.jsonUrl)).json();
+  assert.equal(link.view, 'mcp');
+  assert.equal((link.markdown.match(/\]\(/g) || []).length, 1);
+  assert.equal(fs.existsSync(path.join(home, 'token-lens/browser-server.json')), false);
+  const config = path.join(home, 'token-lens/config.json');
+  fs.writeFileSync(config, JSON.stringify({ reportView: 'browser' }));
+  const helper = path.join(home, 'tools/token-usage-link.cjs');
+  const browser = spawnSync(process.execPath, [helper], { env, encoding: 'utf8', timeout: 10000, windowsHide: true });
+  assert.equal(browser.status, 0, browser.stderr);
+  const browserLink = JSON.parse(browser.stdout);
+  assert.equal(browserLink.view, 'browser');
+  assert.equal(browserLink.turnId, 'second');
+  assert.equal(browserLink.url, browserLink.htmlUrl);
+  assert.equal(browserLink.markdown, `[📊 Токены этого ответа](${browserLink.htmlUrl})`);
+  const data = await (await fetch(browserLink.jsonUrl)).json();
   assert.equal(data.turnId, 'second');
+  fs.writeFileSync(config, JSON.stringify({ reportView: 'mcp' }));
+  const native = spawnSync(process.execPath, [helper], { env, encoding: 'utf8', windowsHide: true });
+  assert.equal(JSON.parse(native.stdout).markdown, link.markdown);
+  fs.writeFileSync(config, '{');
+  const invalid = spawnSync(process.execPath, [helper], { env, encoding: 'utf8', windowsHide: true });
+  assert.notEqual(invalid.status, 0);
+  assert.equal(invalid.stdout, '');
+  assert.ok(invalid.stderr.includes(config));
+  assert.equal(fs.readFileSync(config, 'utf8'), '{');
 });

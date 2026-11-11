@@ -16,10 +16,15 @@ test('default installation preserves existing guidance and is idempotent', () =>
   fs.writeFileSync(path.join(source, 'dist/link.cjs'), 'module.exports = {};');
   fs.writeFileSync(path.join(source, 'dist/report.cjs'), 'report runtime');
   fs.writeFileSync(path.join(source, 'dist/standalone.html'), 'standalone template');
+  fs.copyFileSync(path.join(__dirname, '../src/config.cjs'), path.join(source, 'dist/config.cjs'));
   fs.writeFileSync(path.join(home, 'AGENTS.md'), '# Existing guidance\nKeep this.\n');
   for (let i = 0; i < 2; i++) {
     const result = spawnSync(process.execPath, [path.join(source, 'scripts/enable-default.cjs')], { env: { ...process.env, CODEX_HOME: home }, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
+    if (i === 0) {
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'token-lens/config.json'))), { reportView: 'mcp' });
+      fs.writeFileSync(path.join(home, 'token-lens/config.json'), JSON.stringify({ reportView: 'browser' }));
+    }
   }
   const instructions = fs.readFileSync(path.join(home, 'AGENTS.md'), 'utf8');
   assert(instructions.startsWith('# Existing guidance\nKeep this.\n'));
@@ -27,4 +32,5 @@ test('default installation preserves existing guidance and is idempotent', () =>
   assert.equal(fs.readFileSync(path.join(home, 'tools/token-usage-link.cjs'), 'utf8'), "require('./token-lens/link.cjs').main();\n");
   assert.equal(fs.readFileSync(path.join(home, 'tools/token-lens/report.cjs'), 'utf8'), 'report runtime');
   assert.equal(fs.readFileSync(path.join(home, 'tools/token-lens/standalone.html'), 'utf8'), 'standalone template');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'token-lens/config.json'))), { reportView: 'browser' });
 });
