@@ -1,13 +1,16 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
 
 test('cached panel URIs and the current entrypoint return the same built UI', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'token-lens-mcp-settings-'));
   const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
   const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
   const client = new Client({ name: 'token-lens-resource-check', version: '1.0.0' });
   try {
-    await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(__dirname, '../dist/server.cjs')] }));
+    await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(__dirname, '../dist/server.cjs')], env: { ...process.env, CODEX_HOME: home } }));
     const { tools } = await client.listTools();
     const panel = tools.find(tool => tool.name === 'token_usage_panel');
     assert.equal(panel._meta.ui.resourceUri, 'ui://codex-token-lens/panel.html');
@@ -25,5 +28,15 @@ test('cached panel URIs and the current entrypoint return the same built UI', as
     assert.equal(content[0], content[1]);
     const result = await client.callTool({ name: 'token_usage_panel', arguments: {} });
     assert.equal(result.structuredContent.ready, true);
+    const saved = await client.callTool({ name: 'save_token_settings', arguments: { reportView: 'mcp', appendPlanLimits: false, appendContextHeat: true, contextWindow: 100000, autoDeleteDays: 0 } });
+    assert.equal(saved.structuredContent.appendContextHeat, true);
+    assert.equal(saved.structuredContent.contextWindow, 100000);
+    const oldClient = await client.callTool({ name: 'save_token_settings', arguments: { reportView: 'browser', appendPlanLimits: true, autoDeleteDays: 2 } });
+    assert.equal(oldClient.structuredContent.appendContextHeat, true);
+    assert.equal(oldClient.structuredContent.contextWindow, 100000);
+    const invalid = await client.callTool({ name: 'save_token_settings', arguments: { reportView: 'mcp', appendPlanLimits: false, appendContextHeat: true, contextWindow: 0, autoDeleteDays: 0 } });
+    assert.equal(invalid.isError, true);
+    const settings = await client.callTool({ name: 'read_token_settings', arguments: {} });
+    assert.equal(settings.structuredContent.contextWindow, 100000);
   } finally { await client.close(); }
 });

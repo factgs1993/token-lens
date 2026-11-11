@@ -94,6 +94,23 @@ test('installed helper uses one configured link, switches without reinstalling a
   assert.ok(markdown.startsWith('Лимиты Codex: временно недоступны.\n\n'));
   assert.ok(markdown.endsWith(link.markdown));
   assert.equal((markdown.match(/\]\(/g) || []).length, 1);
+  fs.writeFileSync(config, JSON.stringify({ reportView: 'mcp', appendContextHeat: true }));
+  const missingHeat = spawnSync(process.execPath, [helper], { env, encoding: 'utf8', windowsHide: true });
+  assert.equal(missingHeat.status, 0, missingHeat.stderr);
+  assert.equal(JSON.parse(missingHeat.stdout).markdown, link.markdown);
+  fs.appendFileSync(path.join(home, 'sessions', `rollout-test-${sessionId}.jsonl`), [90000, 156000].map((input, index) => JSON.stringify({
+    type: 'token_usage_record', payload: { turn_id: 'second', response_id: `heat-${index}`, usage: { input_tokens: input, output_tokens: 20 } }
+  })).join('\n') + '\n');
+  for (const view of ['mcp', 'browser']) {
+    fs.writeFileSync(config, JSON.stringify({ reportView: view, appendContextHeat: true, appendPlanLimits: true }));
+    const heat = spawnSync(process.execPath, [helper], { env, encoding: 'utf8', timeout: 10000, windowsHide: true });
+    assert.equal(heat.status, 0, heat.stderr);
+    const heatMarkdown = JSON.parse(heat.stdout).markdown;
+    assert.ok(heatMarkdown.startsWith('Лимиты Codex: временно недоступны.\n\n'));
+    assert.ok(heatMarkdown.endsWith('\n\n🔥 Контекст: 78% · скоро новый чат'));
+    assert.equal((heatMarkdown.match(/\]\(/g) || []).length, 1);
+    assert.equal(JSON.parse(heat.stdout).turnId, 'second');
+  }
   fs.writeFileSync(config, '{');
   const invalid = spawnSync(process.execPath, [helper], { env, encoding: 'utf8', windowsHide: true });
   assert.notEqual(invalid.status, 0);

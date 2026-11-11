@@ -42,7 +42,7 @@ function parseTranscript(text) {
   const seenResponses = new Set();
   const calls = new Map();
   const getTurn = id => {
-    if (!turns.has(id)) turns.set(id, { id, label: '', prompt: null, startedAt: null, status: 'unknown', usage: empty(), requests: [], consumers: {}, categories: {}, models: {}, hasUsage: false });
+    if (!turns.has(id)) turns.set(id, { id, label: '', prompt: null, startedAt: null, status: 'unknown', usage: empty(), requests: [], consumers: {}, categories: {}, models: {}, hasUsage: false, lastInputTokens: null });
     return turns.get(id);
   };
   const add = (object, key, value) => { object[key] = (object[key] ?? 0) + value; };
@@ -94,12 +94,14 @@ function parseTranscript(text) {
     }
 
     let usage = null;
+    let lastInputTokens = null;
     let id = currentTurn || 'legacy';
     if (row.type === 'token_usage_record') {
       const responseKey = p.response_id || `${p.turn_id}:${row.ordinal ?? row.timestamp}`;
       if (seenResponses.has(responseKey)) continue;
       seenResponses.add(responseKey);
       usage = normalizeUsage(p.usage); id = p.turn_id || id;
+      lastInputTokens = usage?.input_tokens ?? null;
     } else if (!modern && row.type === 'event_msg' && p.type === 'token_count' && p.info) {
       const total = normalizeUsage(p.info.total_token_usage);
       const last = normalizeUsage(p.info.last_token_usage);
@@ -110,10 +112,12 @@ function parseTranscript(text) {
       // Legacy cumulative counters can repeat and can reset after a resumed session.
       usage = total.total_tokens >= previousLegacy.total_tokens ? Object.fromEntries(fields.map(key => [key, Math.max(0, total[key] - previousLegacy[key])])) : last;
       previousLegacy = total;
+      lastInputTokens = last.input_tokens;
     }
     if (!usage) continue;
     const turn = getTurn(id);
     turn.hasUsage = true;
+    turn.lastInputTokens = lastInputTokens;
     for (const key of fields) turn.usage[key] += usage[key];
     const models = turn.models[model] ||= empty();
     for (const key of fields) models[key] += usage[key];

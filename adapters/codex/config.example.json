@@ -1,5 +1,7 @@
 {
   "reportView": "mcp",
   "appendPlanLimits": false,
+  "appendContextHeat": false,
+  "contextWindow": 200000,
   "autoDeleteDays": 0
 }

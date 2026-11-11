@@ -17,11 +17,46 @@ const {
 const { ensureServerSync, answerUrl } = require('./serve.cjs');
 const { fetchPlanUsageSync, renderPlanBars, formatPlanUsageLine } = require('./plan-usage.cjs');
 
+function resolveContextInputTokens(report) {
+  const current = report && report.measured && report.measured.input_tokens;
+  if (current != null && Number.isFinite(Number(current))) return Number(current);
+  // Chat tail is written before stop; fall back to last completed turn in this chat.
+  const chatId = report && report.conversation_id;
+  if (!chatId) return null;
+  const chat = loadChat(chatId);
+  const turns = chat && Array.isArray(chat.turns) ? chat.turns : [];
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const turn = turns[i];
+    if (!turn || turn.status === 'in_progress') continue;
+    if (report && report.generation_id && turn.generation_id === report.generation_id) continue;
+    const input = turn.measured && turn.measured.input_tokens;
+    if (input != null && Number.isFinite(Number(input))) return Number(input);
+  }
+  return null;
+}
+
+function formatContextHeatLine(report, settings) {
+  const input = resolveContextInputTokens(report);
+  if (input == null) return 'Контекст: нет данных, появятся со следующим ответом';
+  const window =
+    settings && settings.contextWindowTokens
+      ? Number(settings.contextWindowTokens)
+      : 200000;
+  const pct = Math.min(100, Math.max(0, Math.round((Number(input) / window) * 100)));
+  if (pct >= 85) return `🌋 Контекст: ${pct}% · лучше начать новый чат`;
+  if (pct >= 70) return `🔥 Контекст: ${pct}% · скоро новый чат`;
+  if (pct >= 40) return `🌤️ Контекст: ${pct}% · ещё нормально`;
+  return `🧊 Контекст: ${pct}% · ок`;
+}
+
 function buildAnswerMarkdown(url, report) {
   const settings = readSettings();
   const blocks = [`[📊 Аналитика запроса/ответа](${url})`];
   if (settings.appendPlanLimits) {
     blocks.push(formatPlanUsageLine(report && report.plan_usage));
+  }
+  if (settings.appendContextHeat) {
+    blocks.push(formatContextHeatLine(report, settings));
   }
   return blocks.join('\n\n');
 }
@@ -458,4 +493,5 @@ module.exports = {
   responseLinkFromLatest,
   answerKey,
   buildAnswerMarkdown,
+  formatContextHeatLine,
 };

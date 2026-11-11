@@ -26,6 +26,9 @@
       <h2 id="settings-title">Настройки</h2><form id="settings-form">
         <label>Открывать ссылку в<select id="setting-view"><option value="mcp">Панели Codex</option><option value="browser">Браузере</option></select></label>
         <label class="check"><input id="setting-limits" type="checkbox"> Добавлять лимиты аккаунта в конец ответа</label>
+        <label class="check"><input id="setting-context-heat" type="checkbox"> Добавлять индикатор контекста в конец ответа</label>
+        <label>Окно контекста, токенов<input id="setting-context-window" type="number" min="1" max="9007199254740991" step="1" required aria-describedby="context-heat-help"></label>
+        <p class="muted" id="context-heat-help">Оценка по входу последнего измеренного запроса модели. Пороги: 40%, 70%, 85%. Без счётчиков строка не добавляется. Укажите окно своей модели; по умолчанию 200 000.</p>
         <label>Автоочистка отчётов старше, дней<input id="setting-days" type="number" min="0" max="3650" step="1" required></label>
         <p class="muted">0 — выключена. Старые завершённые отчёты скрываются при просмотре. Журналы чатов Codex сохраняются. Существующие ссылки сохраняют прежний вид.</p>
         <button id="settings-save" type="submit">Сохранить</button><p id="settings-status" role="status"></p>

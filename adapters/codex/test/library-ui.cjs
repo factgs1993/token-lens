@@ -35,10 +35,20 @@ const s1 = '11111111-2222-3333-4444-555555555555', s2 = '22222222-2222-3333-4444
     await page.locator('#settings-save:enabled').waitFor();
     await page.locator('#setting-view').selectOption('browser');
     await page.locator('#setting-limits').check();
+    assert.equal(await page.locator('#setting-context-heat').isChecked(), false);
+    assert.equal(await page.locator('#setting-context-window').inputValue(), '200000');
+    await page.locator('#setting-context-heat').check();
+    await page.locator('#setting-context-window').fill('100000');
     await page.locator('#setting-days').fill('30');
     await page.locator('#settings-save').click();
     await page.locator('#settings-status').filter({ hasText: 'сохранены' }).waitFor();
-    assert.deepEqual(store.settings(), { reportView: 'browser', appendPlanLimits: true, autoDeleteDays: 30 });
+    assert.deepEqual(store.settings(), { reportView: 'browser', appendPlanLimits: true, appendContextHeat: true, contextWindow: 100000, autoDeleteDays: 30 });
+    await page.locator('#page-reports').click(); await page.locator('#page-settings').click();
+    await page.locator('#settings-save:enabled').waitFor();
+    assert.equal(await page.locator('#setting-context-heat').isChecked(), true);
+    assert.equal(await page.locator('#setting-context-window').inputValue(), '100000');
+    assert.equal(await page.locator('html').evaluate(el => el.scrollWidth > el.clientWidth), false);
+    await page.screenshot({ path: 'test/panel-context-settings-mobile.png', fullPage: true });
     await page.locator('#page-reports').click();
     await page.locator('.report-entry').nth(1).waitFor();
     await page.locator('.report-entry input').first().check();
@@ -72,9 +82,13 @@ const s1 = '11111111-2222-3333-4444-555555555555', s2 = '22222222-2222-3333-4444
     const frame = mcp.frameLocator('iframe');
     await frame.locator('.report-entry').waitFor();
     await frame.locator('#page-settings').click(); await frame.locator('#settings-save:enabled').waitFor();
+    assert.equal(await frame.locator('#setting-context-heat').isChecked(), true);
+    assert.equal(await frame.locator('#setting-context-window').inputValue(), '100000');
+    await frame.locator('#setting-context-heat').uncheck();
+    await frame.locator('#setting-context-window').fill('200000');
     await frame.locator('#setting-days').fill('0'); await frame.locator('#settings-save').click();
     await frame.locator('#settings-status').filter({ hasText: 'сохранены' }).waitFor();
-    assert.ok((await mcp.evaluate(() => window.calls)).some(call => call.name === 'save_token_settings' && call.arguments.autoDeleteDays === 0));
+    assert.ok((await mcp.evaluate(() => window.calls)).some(call => call.name === 'save_token_settings' && call.arguments.autoDeleteDays === 0 && call.arguments.appendContextHeat === false && call.arguments.contextWindow === 200000));
     assert.deepEqual(errors, []);
     console.log('PASS library UI: cross-chat navigation, persistent settings, confirmed deletion, mobile layout and MCP app-only tools.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

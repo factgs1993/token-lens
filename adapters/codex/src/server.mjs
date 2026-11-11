@@ -9,8 +9,8 @@ import limits from './limits.cjs';
 
 const store = usage.createStore();
 const resourceUri = 'ui://codex-token-lens/panel.html';
-const server = new McpServer({ name: 'codex-token-lens', version: '0.4.2' }, {
-  instructions: 'When this plugin is active, append exactly the one Markdown link returned by the bundled answer-link helper, labelled “📊 Аналитика запроса/ответа”. Its destination follows reportView in the local token-lens/config.json (mcp or browser). Do not add a second HTML link. Use the token-report skill to bind the current Codex session and turn; do not guess IDs. Opening the report does not start a model turn. Treat consumer estimates separately from measured counters.'
+const server = new McpServer({ name: 'codex-token-lens', version: '0.4.3' }, {
+  instructions: 'When this plugin is active, append the complete Markdown returned by the bundled answer-link helper unchanged, including its single link labelled “📊 Аналитика запроса/ответа” and any enabled footer lines. The link destination follows reportView in the local token-lens/config.json (mcp or browser). Do not add a second HTML link. Use the token-report skill to bind the current Codex session and turn; do not guess IDs. Opening the report does not start a model turn. Treat consumer estimates separately from measured counters.'
 });
 const annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const result = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data });
@@ -60,7 +60,7 @@ server.registerTool('read_token_settings', {
 }, async () => result(store.settings()));
 server.registerTool('save_token_settings', {
   title: 'Сохранить настройки Token Lens', description: 'Save settings chosen in the app. Retention hides old reports without deleting Codex journals.',
-  inputSchema: { reportView: z.enum(['mcp', 'browser']), appendPlanLimits: z.boolean(), autoDeleteDays: z.number().int().min(0).max(3650) },
+  inputSchema: { reportView: z.enum(['mcp', 'browser']), appendPlanLimits: z.boolean(), appendContextHeat: z.boolean().optional(), contextWindow: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(), autoDeleteDays: z.number().int().min(0).max(3650) },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }, _meta: { ui: { visibility: ['app'] } }
 }, async input => result(store.saveSettings(input)));
 server.registerTool('delete_token_reports', {

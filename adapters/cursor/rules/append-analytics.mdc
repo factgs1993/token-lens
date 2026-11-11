@@ -12,5 +12,6 @@ alwaysApply: true
    Опционально вторым аргументом: `generation_id` текущего хода.
 3. Append JSON field `markdown` unchanged as the **last lines** of the answer.
 4. Do not spawn or answer a follow-up that only repeats the link / stats.
-5. Без `conversation_id` не вызывать — иначе возможен чужой чат.
-6. Не выдумывай цифры и URL — только поле `markdown` из JSON.
+5. MCP `token_usage_panel` — только если пользователь явно просит панель; не вызывать в начале и не в каждом ходе.
+6. Без `conversation_id` не вызывать — иначе возможен чужой чат.
+7. Не выдумывай цифры и URL — только поле `markdown` из JSON.

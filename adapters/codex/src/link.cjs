@@ -2,6 +2,14 @@ const { createStore } = require('./usage.cjs');
 const { ensureConfig } = require('./config.cjs');
 const { normalizeLimits, readRateLimits } = require('./limits.cjs');
 
+function formatContextHeatLine(inputTokens, contextWindow = 200000) {
+  if (!Number.isSafeInteger(inputTokens) || inputTokens < 0 || !Number.isSafeInteger(contextWindow) || contextWindow <= 0) return '';
+  // shortcut: last measured input approximates context occupancy; upgrade when Codex exposes actual occupancy.
+  const percent = inputTokens * 100 / contextWindow;
+  const [icon, label] = percent < 40 ? ['🧊', 'ок'] : percent < 70 ? ['🌤️', 'ещё нормально'] : percent < 85 ? ['🔥', 'скоро новый чат'] : ['🌋', 'лучше начать новый чат'];
+  return `${icon} Контекст: ${Math.floor(percent)}% · ${label}`;
+}
+
 function formatFooter(limits) {
   if (!limits?.pools?.length) return 'Лимиты Codex: временно недоступны.';
   const windows = limits.pools.flatMap(pool => [pool.primary, pool.secondary].filter(Boolean).map(window => {
@@ -41,8 +49,12 @@ async function main() {
       try { accountLimits = normalizeLimits(await readRateLimits({ timeoutMs: 3000 })); } catch {}
       link.markdown = formatFooter(accountLimits) + '\n\n' + link.markdown;
     }
+    if (config.appendContextHeat) {
+      const heat = formatContextHeatLine(turn.lastInputTokens, config.contextWindow);
+      if (heat) link.markdown += '\n\n' + heat;
+    }
     console.log(JSON.stringify(link));
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
 if (require.main === module) main();
-module.exports = { responseLink, main, formatFooter };
+module.exports = { responseLink, main, formatFooter, formatContextHeatLine };

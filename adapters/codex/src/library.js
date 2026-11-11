@@ -41,6 +41,7 @@ export function createLibrary({ view, list, readSettings, saveSettings, remove }
     try {
       const data = await readSettings(); if (ticket !== generation) return;
       $('setting-view').value = data.reportView; $('setting-limits').checked = data.appendPlanLimits; $('setting-days').value = data.autoDeleteDays;
+      $('setting-context-heat').checked = data.appendContextHeat; $('setting-context-window').value = data.contextWindow;
       $('settings-status').textContent = ''; $('settings-save').disabled = false;
     } catch (error) { if (ticket === generation) $('settings-status').textContent = error.message; }
   }
@@ -62,7 +63,7 @@ export function createLibrary({ view, list, readSettings, saveSettings, remove }
   $('settings-form').onsubmit = async event => {
     event.preventDefault(); $('settings-save').disabled = true;
     try {
-      await saveSettings({ reportView: $('setting-view').value, appendPlanLimits: $('setting-limits').checked, autoDeleteDays: Number($('setting-days').value) });
+      await saveSettings({ reportView: $('setting-view').value, appendPlanLimits: $('setting-limits').checked, appendContextHeat: $('setting-context-heat').checked, contextWindow: Number($('setting-context-window').value), autoDeleteDays: Number($('setting-days').value) });
       $('settings-status').textContent = 'Настройки сохранены.';
     } catch (error) { $('settings-status').textContent = error.message; }
     finally { $('settings-save').disabled = false; }

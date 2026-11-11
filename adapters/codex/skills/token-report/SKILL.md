@@ -3,7 +3,7 @@ name: token-report
 description: Use when the Codex token report plugin is active or the user wants a token-statistics link at the end of answers. Append a link bound to the current answer.
 ---
 
-For each final answer while this plugin is active, append exactly the helper's single Markdown link labelled `📊 Аналитика запроса/ответа`. Do not add a second HTML link.
+For each final answer while this plugin is active, append the helper's complete returned Markdown unchanged, including its single link labelled `📊 Аналитика запроса/ответа` and any enabled footer lines. Do not add a second HTML link.
 
 Immediately before the final answer, run the installed plugin's `dist/link.cjs` using Node. Resolve it relative to this SKILL.md: `../../dist/link.cjs`. The helper reads `CODEX_THREAD_ID` and the current turn ID from the local journal and prints the exact `markdown` value. Use that value unchanged. Never guess IDs or use a link from an earlier answer.
 
@@ -16,5 +16,7 @@ Both views include a bounded prompt preview, turn history, and measured chat tot
 The account limits section uses Codex App Server rate-limit snapshots: remaining percentages, window lengths and reset times. These apply to the whole account, not to the selected answer. A fixed count of remaining requests is not provided. Do not convert percentages into invented request counts or infer recovery from an elapsed reset time; unavailable and stale limits must stay labelled.
 
 When appendPlanLimits is enabled in Settings, the helper includes an account-wide limits heading and bullet list before the one link. Preserve the complete returned markdown unchanged. Report deletion and retention affect Token Lens visibility only; Codex session journals are preserved.
+
+When appendContextHeat is enabled in Settings (off by default), the helper adds one short context line after the link. It uses the last measured model request's input_tokens and the configured contextWindow (default 200000), not cumulative turn usage or preview estimates. It omits the line when the current turn has no measurement. This is an occupancy proxy, not exact context size; preserve the returned line and do not make a separate tool or model request to calculate it.
 
 If this environment has no local Codex journal or cannot open the plugin UI, state that limitation instead of inventing token counts or a functioning link. Token usage records are local counters, not a monetary bill. Cached input is included in input; reasoning is included in output. Consumer estimates must not be presented as exact billing attribution.

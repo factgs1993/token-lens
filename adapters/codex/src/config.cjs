@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const defaults = { reportView: 'mcp', appendPlanLimits: false, autoDeleteDays: 0 };
+const defaults = { reportView: 'mcp', appendPlanLimits: false, appendContextHeat: false, contextWindow: 200000, autoDeleteDays: 0 };
 const configPath = (home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex')) => path.join(home, 'token-lens', 'config.json');
 
 function readConfig(home) {
@@ -14,22 +14,24 @@ function readConfig(home) {
   try { value = JSON.parse(text.replace(/^\uFEFF/, '')); }
   catch { throw new Error(`Некорректный JSON в ${file}. Файл не изменён.`); }
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !Object.hasOwn(defaults, key))) {
-    throw new Error(`В ${file} ожидаются reportView, appendPlanLimits и autoDeleteDays. Файл не изменён.`);
+    throw new Error(`В ${file} ожидаются ${Object.keys(defaults).join(', ')}. Файл не изменён.`);
   }
   const reportView = value.reportView === undefined ? defaults.reportView : value.reportView;
   if (!['mcp', 'browser'].includes(reportView)) throw new Error(`В ${file}: reportView должен быть mcp или browser. Файл не изменён.`);
   const appendPlanLimits = value.appendPlanLimits === undefined ? defaults.appendPlanLimits : value.appendPlanLimits;
+  const appendContextHeat = value.appendContextHeat === undefined ? defaults.appendContextHeat : value.appendContextHeat;
+  const contextWindow = value.contextWindow === undefined ? defaults.contextWindow : value.contextWindow;
   const autoDeleteDays = value.autoDeleteDays === undefined ? defaults.autoDeleteDays : value.autoDeleteDays;
-  if (typeof appendPlanLimits !== 'boolean' || !Number.isSafeInteger(autoDeleteDays) || autoDeleteDays < 0 || autoDeleteDays > 3650) {
-    throw new Error(`В ${file}: appendPlanLimits — boolean, autoDeleteDays — целое от 0 до 3650. Файл не изменён.`);
+  if (typeof appendPlanLimits !== 'boolean' || typeof appendContextHeat !== 'boolean' || !Number.isSafeInteger(contextWindow) || contextWindow <= 0 || !Number.isSafeInteger(autoDeleteDays) || autoDeleteDays < 0 || autoDeleteDays > 3650) {
+    throw new Error(`В ${file}: appendPlanLimits и appendContextHeat — boolean, contextWindow — положительное безопасное целое, autoDeleteDays — целое от 0 до 3650. Файл не изменён.`);
   }
-  return { reportView, appendPlanLimits, autoDeleteDays };
+  return { reportView, appendPlanLimits, appendContextHeat, contextWindow, autoDeleteDays };
 }
 
 function writeConfig(patch, home) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(key => !Object.hasOwn(defaults, key))) throw new Error('Неизвестные настройки.');
   const next = { ...readConfig(home), ...patch };
-  if (!['mcp', 'browser'].includes(next.reportView) || typeof next.appendPlanLimits !== 'boolean' || !Number.isSafeInteger(next.autoDeleteDays) || next.autoDeleteDays < 0 || next.autoDeleteDays > 3650) throw new Error('Некорректные настройки.');
+  if (!['mcp', 'browser'].includes(next.reportView) || typeof next.appendPlanLimits !== 'boolean' || typeof next.appendContextHeat !== 'boolean' || !Number.isSafeInteger(next.contextWindow) || next.contextWindow <= 0 || !Number.isSafeInteger(next.autoDeleteDays) || next.autoDeleteDays < 0 || next.autoDeleteDays > 3650) throw new Error('Некорректные настройки.');
   const file = configPath(home);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.tmp`;

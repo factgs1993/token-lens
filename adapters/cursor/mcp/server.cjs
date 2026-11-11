@@ -30,7 +30,7 @@ const server = new McpServer(
   { name: 'cursor-token-lens', version: '0.3.0' },
   {
     instructions:
-      'At the end of each final answer, run the bundled answer-link helper with the current conversation_id and append its complete markdown unchanged, including plan limits when enabled. Call token_usage_panel only when the user explicitly asks for the panel. Do not invent token counts or conversation IDs.',
+      'Ordinary turns: do not call token_usage_panel or read_token_usage. Append the «📊 Аналитика запроса/ответа» link only via answer-link.cjs at the very end of the final text reply. Call token_usage_panel solely when the user explicitly asks for the in-chat panel / «панель». Never invent token counts or conversation IDs.',
   }
 );
 
@@ -67,7 +67,7 @@ server.registerTool(
   {
     title: 'Аналитика запроса/ответа',
     description:
-      'Показать локальную аналитику токенов текущего/последнего ответа Cursor: фактический вход/выход и оценка потребителей. Без сети.',
+      'Показать in-chat панель аналитики токенов. Вызывать только по явной просьбе пользователя («панель», token_usage_panel). Обычный хвост ответа — markdown-ссылка через answer-link.cjs, без этого tool.',
     inputSchema: {
       conversationId: z.string().min(1).max(100).optional(),
     },

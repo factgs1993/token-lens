@@ -284,10 +284,16 @@ function testAnswerMarkdownFlags() {
   writeSettings({
     autoDeleteDays: 0,
     appendPlanLimits: true,
+    appendContextHeat: true,
+    contextWindowTokens: 200000,
     lastAutoPurgeAt: null,
   });
   delete require.cache[require.resolve(path.join(__dirname, '..', 'answer-page.cjs'))];
-  const { buildAnswerMarkdown } = require(path.join(__dirname, '..', 'answer-page.cjs'));
+  const { buildAnswerMarkdown, formatContextHeatLine } = require(path.join(
+    __dirname,
+    '..',
+    'answer-page.cjs'
+  ));
   const md = buildAnswerMarkdown('http://127.0.0.1:3847/answers/x.html', {
     measured: { input_tokens: 1200, output_tokens: 34, incomplete: false },
     plan_usage: {
@@ -299,7 +305,46 @@ function testAnswerMarkdownFlags() {
   assert.match(md, /^\[📊 Аналитика запроса\/ответа\]/);
   assert.equal(md.includes('↓'), false);
   assert.match(md, /Лимиты:.*Auto 12%/);
-  writeSettings({ appendPlanLimits: false });
+  assert.match(md, /🧊 Контекст: 1% · ок/);
+  assert.match(
+    formatContextHeatLine({ measured: { input_tokens: 160000 } }, { contextWindowTokens: 200000 }),
+    /🔥 Контекст: 80%/
+  );
+  assert.match(
+    formatContextHeatLine({ measured: { input_tokens: 190000 } }, { contextWindowTokens: 200000 }),
+    /🌋 Контекст: 95%/
+  );
+  assert.equal(formatContextHeatLine({}, { contextWindowTokens: 200000 }), 'Контекст: нет данных, появятся со следующим ответом');
+  const heatChat = 'chat-heat-fallback';
+  saveTurn({
+    at: '2026-01-01T00:00:00.000Z',
+    conversation_id: heatChat,
+    generation_id: 'heat-prev',
+    status: 'completed',
+    measured: {
+      input_tokens: 150000,
+      output_tokens: 1,
+      total_tokens: 150001,
+      incomplete: false,
+      reasoning_tokens: null,
+    },
+    categories: emptyCategories(),
+    consumers: [],
+    requests: [],
+  });
+  assert.match(
+    formatContextHeatLine(
+      {
+        conversation_id: heatChat,
+        generation_id: 'heat-live',
+        status: 'in_progress',
+        measured: null,
+      },
+      { contextWindowTokens: 200000 }
+    ),
+    /🔥 Контекст: 75%/
+  );
+  writeSettings({ appendPlanLimits: false, appendContextHeat: false });
 }
 
 testAnswerMarkdownFlags();

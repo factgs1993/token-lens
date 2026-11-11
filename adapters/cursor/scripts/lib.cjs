@@ -781,12 +781,23 @@ function asBool(value, fallback = false) {
   return fallback;
 }
 
+const DEFAULT_CONTEXT_WINDOW_TOKENS = 200000;
+
+function normalizeContextWindowTokens(value) {
+  const n = Number(value);
+  // shortcut: fixed default window until we map model → window size
+  if (!Number.isFinite(n) || n < 10000) return DEFAULT_CONTEXT_WINDOW_TOKENS;
+  return Math.min(Math.round(n), 10000000);
+}
+
 function readSettings() {
   const raw = readJson(SETTINGS_PATH, {}) || {};
   return {
     autoDeleteDays: normalizeAutoDeleteDays(raw.autoDeleteDays),
     lastAutoPurgeAt: typeof raw.lastAutoPurgeAt === 'string' ? raw.lastAutoPurgeAt : null,
     appendPlanLimits: asBool(raw.appendPlanLimits, false),
+    appendContextHeat: asBool(raw.appendContextHeat, false),
+    contextWindowTokens: normalizeContextWindowTokens(raw.contextWindowTokens),
   };
 }
 
@@ -802,6 +813,14 @@ function writeSettings(patch = {}) {
       patch.appendPlanLimits !== undefined
         ? asBool(patch.appendPlanLimits, current.appendPlanLimits)
         : current.appendPlanLimits,
+    appendContextHeat:
+      patch.appendContextHeat !== undefined
+        ? asBool(patch.appendContextHeat, current.appendContextHeat)
+        : current.appendContextHeat,
+    contextWindowTokens:
+      patch.contextWindowTokens !== undefined
+        ? normalizeContextWindowTokens(patch.contextWindowTokens)
+        : current.contextWindowTokens,
   };
   writeJson(SETTINGS_PATH, next);
   return next;
@@ -1013,6 +1032,8 @@ module.exports = {
   writeSettings,
   purgeOldAnswers,
   normalizeAutoDeleteDays,
+  normalizeContextWindowTokens,
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
   renderMarkdown,
   formatNum,
   compactNum,

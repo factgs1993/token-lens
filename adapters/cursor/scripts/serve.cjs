@@ -105,9 +105,11 @@ function decorateAnswerHtml(html, reportKey = null) {
   out = out.replace(/<style id="token-lens-settings-css">[\s\S]*?<\/style>/i, '');
   out = out.replace(/<section class="tl-settings"[\s\S]*?<\/section>/i, '');
   out = out.replace(/<script id="token-lens-settings-js">[\s\S]*?<\/script>/i, '');
+  // Prefer in-page nav (div.nav with live badge). Only rewrite legacy <p class="nav">;
+  // never inject a second bar when any .nav already exists.
   if (/<p class="nav">[\s\S]*?<\/p>/i.test(out)) {
     out = out.replace(/<p class="nav">[\s\S]*?<\/p>/i, nav);
-  } else if (/<main[^>]*>/i.test(out)) {
+  } else if (!/class="nav"/i.test(out) && /<main[^>]*>/i.test(out)) {
     out = out.replace(/<main[^>]*>/i, (m) => `${m}\n${nav}`);
   }
   if (!out.includes('token-lens-deleted-watch')) {
@@ -178,6 +180,11 @@ function renderSettingsHtml(fromKey = null) {
       </div>
       <p id="planLimitsHint" class="hint" hidden>Работает для встроенных моделей Cursor в рамках подписки (Usage / Auto + Composer). Для внешних API-ключей и BYOK цифры могут быть недоступны или неполны.</p>
       <div class="row">
+        <label><input type="checkbox" id="appendContextHeat" /> Append context heat (emoji hint to start a new chat)</label>
+        <button type="button" class="help" id="contextHeatHelp" aria-expanded="false" aria-controls="contextHeatHint" aria-label="About context heat">?</button>
+      </div>
+      <p id="contextHeatHint" class="hint" hidden>Оценка заполнения контекста по measured input последнего хода относительно окна (по умолчанию 200k). Не биллинг: 🧊 ок → 🌤️ нормально → 🔥 скоро новый чат → 🌋 лучше новый чат. Пока measured input нет: «Контекст: нет данных, появятся со следующим ответом».</p>
+      <div class="row">
         <button type="button" class="save" id="saveSettings">Save</button>
         <span id="settingsStatus"></span>
       </div>
@@ -190,15 +197,19 @@ function renderSettingsHtml(fromKey = null) {
       var autoDays = document.getElementById('autoDays');
       var customWrap = document.getElementById('customWrap');
       var appendPlanLimits = document.getElementById('appendPlanLimits');
+      var appendContextHeat = document.getElementById('appendContextHeat');
       var status = document.getElementById('settingsStatus');
       var planHelp = document.getElementById('planLimitsHelp');
       var planHint = document.getElementById('planLimitsHint');
+      var heatHelp = document.getElementById('contextHeatHelp');
+      var heatHint = document.getElementById('contextHeatHint');
       function syncCustom() { customWrap.hidden = autoMode.value !== 'custom'; }
       function applySettings(s) {
         var days = Number(s.autoDeleteDays || 0);
         if (days === 0 || presets.indexOf(days) >= 0) autoMode.value = String(days);
         else { autoMode.value = 'custom'; autoDays.value = String(days); }
         appendPlanLimits.checked = !!s.appendPlanLimits;
+        appendContextHeat.checked = !!s.appendContextHeat;
         syncCustom();
       }
       autoMode.addEventListener('change', syncCustom);
@@ -206,6 +217,11 @@ function renderSettingsHtml(fromKey = null) {
         var open = planHint.hidden;
         planHint.hidden = !open;
         planHelp.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      heatHelp.addEventListener('click', function () {
+        var open = heatHint.hidden;
+        heatHint.hidden = !open;
+        heatHelp.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
       fetch('/api/settings').then(function (r) { return r.json(); }).then(function (d) { applySettings(d.settings || {}); }).catch(function () {});
       document.getElementById('saveSettings').addEventListener('click', function () {
@@ -216,7 +232,8 @@ function renderSettingsHtml(fromKey = null) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             autoDeleteDays: days,
-            appendPlanLimits: appendPlanLimits.checked
+            appendPlanLimits: appendPlanLimits.checked,
+            appendContextHeat: appendContextHeat.checked
           })
         }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
           .then(function (res) {
@@ -538,6 +555,8 @@ async function handleRequest(req, res) {
       const patch = {};
       if (body.autoDeleteDays !== undefined) patch.autoDeleteDays = normalizeAutoDeleteDays(body.autoDeleteDays);
       if (body.appendPlanLimits !== undefined) patch.appendPlanLimits = body.appendPlanLimits;
+      if (body.appendContextHeat !== undefined) patch.appendContextHeat = body.appendContextHeat;
+      if (body.contextWindowTokens !== undefined) patch.contextWindowTokens = body.contextWindowTokens;
       writeSettings(patch);
       const purge = purgeOldAnswers({ force: true });
       res
