@@ -7,9 +7,9 @@ function formatFooter(limits) {
   const windows = limits.pools.flatMap(pool => [pool.primary, pool.secondary].filter(Boolean).map(window => {
     const minutes = window.windowMinutes;
     const duration = !minutes ? 'окно' : minutes % 1440 === 0 ? `${minutes / 1440} д` : minutes % 60 === 0 ? `${minutes / 60} ч` : `${minutes} мин`;
-    return `${pool.name}: осталось ${window.remainingPercent}% (${duration})`;
+    return `${pool.name === 'Codex' ? 'Осталось' : `${pool.name}: осталось`} ${window.remainingPercent}% (${duration})`;
   }));
-  return `Лимиты аккаунта Codex: ${windows.join(' · ')}. Общие для всех чатов.`;
+  return ['Лимиты аккаунта Codex:', ...windows, 'Общие для всех чатов.'].join('  \n');
 }
 
 function responseLink(sessionId, turnId) {

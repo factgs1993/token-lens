@@ -60,7 +60,7 @@ function readRateLimits({ command = process.env.TOKEN_LENS_CODEX_BIN || 'codex',
     });
     child.on('exit', () => finish(new Error(unavailable)));
     child.once('spawn', () => send({ id: 1, method: 'initialize', params: {
-      clientInfo: { name: 'token_lens_limits', version: '0.4.0' },
+      clientInfo: { name: 'token_lens_limits', version: '0.4.1' },
       capabilities: { experimentalApi: true, explicitGatewayOauth: true }
     } }));
   });

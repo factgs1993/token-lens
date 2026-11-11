@@ -9,7 +9,7 @@ import limits from './limits.cjs';
 
 const store = usage.createStore();
 const resourceUri = 'ui://codex-token-lens/panel.html';
-const server = new McpServer({ name: 'codex-token-lens', version: '0.4.0' }, {
+const server = new McpServer({ name: 'codex-token-lens', version: '0.4.1' }, {
   instructions: 'When this plugin is active, append exactly the one Markdown link returned by the bundled answer-link helper, labelled “📊 Аналитика запроса/ответа”. Its destination follows reportView in the local token-lens/config.json (mcp or browser). Do not add a second HTML link. Use the token-report skill to bind the current Codex session and turn; do not guess IDs. Opening the report does not start a model turn. Treat consumer estimates separately from measured counters.'
 });
 const annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };

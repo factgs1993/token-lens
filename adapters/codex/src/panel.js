@@ -1,7 +1,7 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from '@modelcontextprotocol/ext-apps';
 import { createReportView } from './view.js';
 import { createLibrary } from './library.js';
-const app = new App({ name: 'codex-token-lens', version: '0.4.0' }, { availableDisplayModes: ['inline', 'fullscreen'] });
+const app = new App({ name: 'codex-token-lens', version: '0.4.1' }, { availableDisplayModes: ['inline', 'fullscreen'] });
 let connected = false;
 async function call(name, args = {}) {
   const result = await app.callServerTool({ name, arguments: args });
