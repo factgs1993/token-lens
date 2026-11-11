@@ -14,6 +14,8 @@ test('default installation preserves existing guidance and is idempotent', () =>
   fs.mkdirSync(home);
   fs.copyFileSync(path.join(__dirname, '../scripts/enable-default.cjs'), path.join(source, 'scripts/enable-default.cjs'));
   fs.writeFileSync(path.join(source, 'dist/link.cjs'), 'module.exports = {};');
+  fs.writeFileSync(path.join(source, 'dist/report.cjs'), 'report runtime');
+  fs.writeFileSync(path.join(source, 'dist/standalone.html'), 'standalone template');
   fs.writeFileSync(path.join(home, 'AGENTS.md'), '# Existing guidance\nKeep this.\n');
   for (let i = 0; i < 2; i++) {
     const result = spawnSync(process.execPath, [path.join(source, 'scripts/enable-default.cjs')], { env: { ...process.env, CODEX_HOME: home }, encoding: 'utf8' });
@@ -22,5 +24,7 @@ test('default installation preserves existing guidance and is idempotent', () =>
   const instructions = fs.readFileSync(path.join(home, 'AGENTS.md'), 'utf8');
   assert(instructions.startsWith('# Existing guidance\nKeep this.\n'));
   assert.equal(instructions.split('codex-token-lens-default:start').length, 2);
-  assert.equal(fs.readFileSync(path.join(home, 'tools/token-usage-link.cjs'), 'utf8'), 'module.exports = {};');
+  assert.equal(fs.readFileSync(path.join(home, 'tools/token-usage-link.cjs'), 'utf8'), "require('./token-lens/link.cjs').main();\n");
+  assert.equal(fs.readFileSync(path.join(home, 'tools/token-lens/report.cjs'), 'utf8'), 'report runtime');
+  assert.equal(fs.readFileSync(path.join(home, 'tools/token-lens/standalone.html'), 'utf8'), 'standalone template');
 });

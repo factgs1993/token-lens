@@ -45,6 +45,21 @@ test('deep link binds both IDs and rejects traversal', () => {
   const route=new URL(new URL(link.url).searchParams.get('path'),'https://example.invalid');
   assert.equal(route.searchParams.get('sessionId'),'session-1');assert.equal(route.searchParams.get('turnId'),'turn-2');assert.throws(()=>responseLink('../../auth','turn-2'));
 });
+test('prompt metadata is bounded, ignores synthetic instructions and needs no usage counters', () => {
+  const prompt = '  Привет\n' + 'я'.repeat(250);
+  const report = parseTranscript(stringify([
+    row('event_msg', { type: 'task_started', turn_id: 't1' }),
+    row('response_item', { type: 'message', role: 'user', content: [{ text: '<environment_context>private</environment_context>' }] }),
+    row('event_msg', { type: 'user_message', message: prompt }),
+    row('response_item', { type: 'message', role: 'user', content: [{ text: prompt }] }),
+    row('event_msg', { type: 'task_started', turn_id: 't2' })
+  ]));
+  assert.equal(report.turns[0].prompt.preview.length, 200);
+  assert.equal(report.turns[0].prompt.length, prompt.length);
+  assert.equal(report.turns[0].prompt.truncated, true);
+  assert.equal(report.turns[1].prompt, null);
+  assert.equal(JSON.stringify(report).includes(prompt), false);
+});
 test('store only reads session rollouts and refuses unknown turns', () => {
   const home=fs.mkdtempSync(path.join(os.tmpdir(),'token-lens-test-'));const dir=path.join(home,'sessions','2026','11','10');fs.mkdirSync(dir,{recursive:true});
   const sessionId='11111111-2222-3333-4444-555555555555';const file=path.join(dir,`rollout-2026-11-10T10-00-00-${sessionId}.jsonl`);
@@ -53,4 +68,13 @@ test('store only reads session rollouts and refuses unknown turns', () => {
   assert.throws(()=>store.report('../auth'));assert.throws(()=>store.answer(sessionId,'unknown'));
   fs.appendFileSync(file,stringify([row('token_usage_record',{turn_id:'turn',response_id:'r2',usage:tokens(20,4)})]));
   assert.equal(store.answer(sessionId,'turn').turn.usage.total_tokens,37);
+  fs.appendFileSync(file, stringify([row('event_msg', { type: 'task_started', turn_id: 'missing' })]));
+  const snapshot = store.snapshot(sessionId, 'turn');
+  assert.equal(snapshot.turnId, 'turn');
+  assert.equal(snapshot.summary.totals.total_tokens, 37);
+  assert.equal(snapshot.summary.totals.cached_input_tokens, 4);
+  assert.equal(snapshot.summary.missingUsageTurns, 1);
+  assert.equal(snapshot.summary.turnCount, 2);
+  assert.throws(() => store.snapshot(sessionId, 'unknown'));
+  assert.equal(store.snapshot(sessionId, 'missing').turnId, 'missing');
 });
