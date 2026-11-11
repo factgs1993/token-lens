@@ -1,0 +1,10 @@
+{
+  "name": "cursor-token-lens",
+  "version": "0.2.0",
+  "description": "Как в Codex: в конце ответа «📊 Аналитика запроса/ответа» + MCP-панель с входом/выходом и потребителями.",
+  "author": {
+    "name": "Owl Assist"
+  },
+  "license": "MIT",
+  "keywords": ["tokens", "usage", "cost", "observability"]
+}
