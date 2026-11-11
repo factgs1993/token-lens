@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 fs.mkdirSync('dist', { recursive: true });
 await build({ entryPoints: ['src/server.mjs'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist/server.cjs' });
 await build({ entryPoints: ['src/link.cjs'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist/link.cjs' });
+await build({ entryPoints: ['src/config.cjs'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist/config.cjs' });
 await build({ entryPoints: ['src/report.cjs'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist/report.cjs' });
 const js = await build({ entryPoints: ['src/panel.js'], bundle: true, platform: 'browser', format: 'esm', target: 'es2022', minify: true, write: false });
 const css = await build({ entryPoints: ['src/panel.css'], bundle: true, minify: true, write: false });
@@ -17,7 +18,8 @@ const standalone = await build({ entryPoints: ['src/standalone.js'], bundle: tru
 fs.writeFileSync('dist/standalone.html', template.replace('/* APP */', () => standalone.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')));
 fs.mkdirSync('package/dist', { recursive: true });
 for (const file of ['plugin.json', 'mcp.json']) fs.copyFileSync(file, `package/${file}`);
-for (const file of ['server.cjs', 'link.cjs', 'report.cjs', 'panel.html', 'standalone.html']) fs.copyFileSync(`dist/${file}`, `package/dist/${file}`);
+for (const file of ['server.cjs', 'link.cjs', 'config.cjs', 'report.cjs', 'panel.html', 'standalone.html']) fs.copyFileSync(`dist/${file}`, `package/dist/${file}`);
+fs.copyFileSync('config.example.json', 'package/config.example.json');
 fs.cpSync('skills', 'package/skills', { recursive: true });
 fs.cpSync('scripts', 'package/scripts', { recursive: true });
 console.log('Built local MCP server and self-contained panel.');
