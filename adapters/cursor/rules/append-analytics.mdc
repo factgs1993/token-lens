@@ -5,12 +5,8 @@ alwaysApply: true
 
 # Аналитика запроса/ответа (Token Lens)
 
-Как в Codex: в конце ответа — **markdown-ссылка** на страницу этого ответа, не таблица в чате.
-
-## Порядок
+Как в Codex: в конце ответа — **одна** markdown-ссылка, без второго агентного хода.
 
 1. `node "%USERPROFILE%\.cursor\plugins\local\cursor-token-lens\scripts\answer-link.cjs"`
 2. Append JSON field `markdown` unchanged as the last line.
-3. Optional: call MCP `token_usage_panel` once.
-
-If the user prompt asks to show only the analytics markdown/link — output only that, no tools.
+3. Do not spawn or answer a follow-up that only repeats the link.
