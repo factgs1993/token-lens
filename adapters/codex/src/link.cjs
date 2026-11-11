@@ -7,13 +7,22 @@ function responseLink(sessionId, turnId) {
   return { sessionId, turnId, url, markdown: `[📊 Токены этого ответа](${url})` };
 }
 
-if (require.main === module) {
+async function main() {
   try {
     const sessionId = process.argv[2] || process.env.CODEX_THREAD_ID;
     const store = createStore();
     const turn = store.report(sessionId).turns.at(-1);
     if (!turn) throw new Error('Current turn not found');
-    console.log(JSON.stringify(responseLink(sessionId, turn.id)));
+    const link = responseLink(sessionId, turn.id);
+    try {
+      const baseUrl = await require('./report.cjs').ensureReportServer();
+      const query = new URLSearchParams({ sessionId, turnId: turn.id });
+      link.htmlUrl = `${baseUrl}/answer?${query}`;
+      link.jsonUrl = `${baseUrl}/export.json?${query}`;
+      link.markdown += ` · [HTML](${link.htmlUrl})`;
+    } catch (error) { link.fallbackError = error.message; }
+    console.log(JSON.stringify(link));
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
-module.exports = { responseLink };
+if (require.main === module) main();
+module.exports = { responseLink, main };

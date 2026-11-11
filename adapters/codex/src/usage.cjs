@@ -40,16 +40,24 @@ function parseTranscript(text) {
   const seenResponses = new Set();
   const calls = new Map();
   const getTurn = id => {
-    if (!turns.has(id)) turns.set(id, { id, label: '', startedAt: null, status: 'unknown', usage: empty(), requests: [], consumers: {}, categories: {}, models: {}, hasUsage: false });
+    if (!turns.has(id)) turns.set(id, { id, label: '', prompt: null, startedAt: null, status: 'unknown', usage: empty(), requests: [], consumers: {}, categories: {}, models: {}, hasUsage: false });
     return turns.get(id);
   };
   const add = (object, key, value) => { object[key] = (object[key] ?? 0) + value; };
   const contentText = p => (p.content || []).filter(c => typeof c.text === 'string').map(c => c.text).join('\n');
+  function capturePrompt(id, text) {
+    if (!id || typeof text !== 'string' || !text.trim() || getTurn(id).prompt) return;
+    const preview = text.replace(/\s+/g, ' ').trim();
+    const turn = getTurn(id);
+    turn.prompt = { preview: preview.slice(0, 200), length: text.length, truncated: preview.length > 200 };
+    turn.label = preview.slice(0, 90);
+  }
 
   for (const row of rows) {
     const p = row.payload || {};
     if (row.type === 'session_meta') base = typeof p.base_instructions === 'string' ? p.base_instructions : p.base_instructions?.text || '';
     if (row.type === 'turn_context') { currentTurn = p.turn_id || currentTurn; model = p.model || model; }
+    if (row.type === 'event_msg' && p.type === 'user_message') capturePrompt(p.turn_id || currentTurn, p.message);
     if (row.type === 'event_msg' && ['task_started', 'turn_started'].includes(p.type)) {
       currentTurn = p.turn_id || p.turn_attribution?.turn_id || 'legacy';
       const turn = getTurn(currentTurn);
@@ -71,7 +79,7 @@ function parseTranscript(text) {
       if (p.type === 'message') {
         const text = contentText(p);
         if (text) (p.role === 'assistant' ? pendingAssistant : visible).push({ category: ['developer', 'system'].includes(p.role) ? 'instructions' : 'conversation', tokens: estimate(text), consumer: null });
-        if (p.role === 'user' && currentTurn && !getTurn(currentTurn).label && !text.trim().startsWith('<')) getTurn(currentTurn).label = text.replace(/\s+/g, ' ').slice(0, 90);
+        if (p.role === 'user' && !text.trim().startsWith('<')) capturePrompt(currentTurn, text);
       }
       if (['function_call', 'custom_tool_call'].includes(p.type)) {
         const name = p.name || 'tool';
@@ -173,7 +181,18 @@ function createStore(codexHome = process.env.CODEX_HOME || path.join(os.homedir(
     if (!turn) throw new Error('Ответ не найден в журнале этого чата.');
     return { sessionId, turn, source: data.source, malformedLines: data.malformedLines, estimateMethod: data.estimateMethod };
   }
-  return { list, report, answer };
+  function snapshot(sessionId, turnId) {
+    if (!validId(turnId)) throw new Error('Некорректный ID ответа.');
+    const data = report(sessionId);
+    if (!data.turns.some(turn => turn.id === turnId)) throw new Error('Ответ не найден в журнале этого чата.');
+    const measured = data.turns.filter(turn => turn.hasUsage);
+    const totals = empty();
+    for (const turn of measured) for (const key of fields) totals[key] += turn.usage[key];
+    return { schemaVersion: 1, exportedAt: new Date().toISOString(), ...data, turnId,
+      summary: { totals: measured.length ? totals : null, turnCount: data.turns.length, measuredTurnCount: measured.length,
+        missingUsageTurns: data.turns.length - measured.length, runningTurns: data.turns.filter(turn => turn.status === 'running').length } };
+  }
+  return { list, report, answer, snapshot };
 }
 
 module.exports = { parseTranscript, createStore, normalizeUsage };

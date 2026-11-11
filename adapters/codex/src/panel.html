@@ -11,6 +11,13 @@
     <header><div><div class="eyebrow">CODEX · ЛОКАЛЬНАЯ СТАТИСТИКА</div><h1>Расход токенов</h1></div><span class="live" id="live">Подключение…</span></header>
     <p id="answer-title" class="muted"></p>
     <p id="status" role="status">Подключение к Codex…</p>
+    <div id="content" hidden>
+    <nav class="toolbar" aria-label="Отчёт"><a id="browser-report" hidden>HTML в браузере</a><a id="download-html" hidden>Скачать HTML</a><a id="download-json" href="#">Скачать JSON</a><button id="return-answer" type="button" hidden>К исходному ответу</button></nav>
+    <details class="prompt"><summary id="prompt-title">Запрос</summary><pre id="prompt-preview"></pre></details>
+    <details id="history"><summary>История ходов и итоги чата</summary>
+      <section class="metrics" aria-label="Итоги чата"><article class="metric primary"><span>Всего по чату</span><strong id="chat-total">—</strong><small>по записанным счётчикам</small></article><article class="metric"><span>Вход</span><strong id="chat-input">—</strong><small>кэш входит во вход</small></article><article class="metric"><span>Выход</span><strong id="chat-output">—</strong><small>рассуждения входят в выход</small></article></section>
+      <p class="muted" id="chat-coverage"></p><div id="turns" class="turns"></div>
+    </details>
     <div id="report" hidden>
       <div class="eyebrow">ФАКТИЧЕСКИЕ СЧЁТЧИКИ</div>
       <section class="metrics" aria-label="Фактический расход">
@@ -23,7 +30,9 @@
       <section class="section"><div class="section-title"><h2>Запросы модели</h2><span id="request-count" class="badge"></span></div><div class="table-wrap"><table><thead><tr><th>Шаг / модель</th><th>Вход</th><th>Кэш¹</th><th>Выход</th></tr></thead><tbody id="requests"></tbody></table></div><p class="muted">¹ Кэш уже входит во вход. Рассуждения уже входят в выход.</p></section>
       <details><summary>Источник и точность</summary><p class="muted" id="source"></p><p class="muted">Скрытые инструкции, изменения схем, изображения и серверная подготовка контекста могут отсутствовать в журнале. Оценки категорий не обязаны совпадать с фактическими счётчиками. Формат журнала Codex может меняться.</p></details>
     </div>
+    </div>
   </main>
+  <script type="application/json" id="report-data">/* REPORT_DATA */</script>
   <script>/* APP */</script>
 </body>
 </html>
