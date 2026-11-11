@@ -22,7 +22,7 @@ test('default installation preserves existing guidance and is idempotent', () =>
     const result = spawnSync(process.execPath, [path.join(source, 'scripts/enable-default.cjs')], { env: { ...process.env, CODEX_HOME: home }, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
     if (i === 0) {
-      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'token-lens/config.json'))), { reportView: 'mcp' });
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'token-lens/config.json'))), { reportView: 'mcp', appendPlanLimits: false, autoDeleteDays: 0 });
       fs.writeFileSync(path.join(home, 'token-lens/config.json'), JSON.stringify({ reportView: 'browser' }));
     }
   }

@@ -27,7 +27,7 @@ function panelHtml(payload) {
 }
 
 const server = new McpServer(
-  { name: 'cursor-token-lens', version: '0.2.0' },
+  { name: 'cursor-token-lens', version: '0.3.0' },
   {
     instructions:
       'When this server is available, call token_usage_panel once near the end of each final answer and append the markdown from answer-link / tool result labelled «📊 Аналитика запроса/ответа». Do not invent token counts.',

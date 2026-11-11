@@ -1,3 +1,5 @@
 {
-  "reportView": "mcp"
+  "reportView": "mcp",
+  "appendPlanLimits": false,
+  "autoDeleteDays": 0
 }

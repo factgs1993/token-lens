@@ -13,9 +13,14 @@ const {
   appendJsonl,
   measuredFromPayload,
   emptyPending,
+  emptyCategories,
   liveReportFromPending,
   promptPreview,
   extractPromptText,
+  estimateInstructions,
+  estimateSchemas,
+  estimateConversationContext,
+  pushRequest,
   add,
   rank,
   saveTurn,
@@ -46,6 +51,12 @@ function reply(obj) {
   process.stdout.write(JSON.stringify(obj || {}));
 }
 
+function workspaceRoots(payload) {
+  if (Array.isArray(payload.workspace_roots)) return payload.workspace_roots.filter((v) => typeof v === 'string');
+  if (typeof payload.workspace_root === 'string' && payload.workspace_root) return [payload.workspace_root];
+  return [];
+}
+
 function savePrompt(conversationId, payload) {
   const preview = promptPreview(extractPromptText(payload));
   const record = {
@@ -59,6 +70,34 @@ function savePrompt(conversationId, payload) {
   };
   writeSessionPrompt(conversationId, record);
   return record;
+}
+
+function touchLivePage(pending) {
+  try {
+    ensureServerSync();
+    if (pending.generation_id) {
+      writeAnswerPage(liveReportFromPending(pending, { status: 'in_progress' }));
+    }
+  } catch {
+    /* non-fatal */
+  }
+}
+
+function hydratePending(conversationId, payload) {
+  const pending = readSessionPending(conversationId);
+  const saved = readSessionPrompt(conversationId);
+  pending.conversation_id = conversationId || pending.conversation_id;
+  pending.prompt_preview = pending.prompt_preview || saved.prompt_preview;
+  pending.prompt_length = pending.prompt_length || saved.prompt_length || 0;
+  pending.generation_id = payload.generation_id || pending.generation_id || saved.generation_id;
+  pending.model = payload.model || payload.model_id || pending.model || saved.model;
+  if (!pending.categories) pending.categories = emptyCategories();
+  if (!Array.isArray(pending.requests)) pending.requests = [];
+  if (!Array.isArray(pending.tools)) pending.tools = [];
+  if (!pending.consumers || typeof pending.consumers !== 'object' || Array.isArray(pending.consumers)) {
+    pending.consumers = {};
+  }
+  return pending;
 }
 
 async function main() {
@@ -94,33 +133,23 @@ async function main() {
     if (event === 'beforeSubmitPrompt') {
       const pending = emptyPending(conversationId);
       const saved = savePrompt(conversationId, payload);
+      const promptText = extractPromptText(payload);
       pending.prompt_preview = saved.prompt_preview;
       pending.prompt_length = saved.prompt_length;
       pending.generation_id = saved.generation_id;
       pending.model = saved.model;
+      pending.categories.instructions = estimateInstructions(workspaceRoots(payload));
+      pending.categories.schemas = estimateSchemas();
+      pending.categories.conversation = estimateConversationContext(conversationId, promptText);
       writeSessionPending(conversationId, pending);
       setActive(conversationId, pending.generation_id);
-      try {
-        ensureServerSync();
-        if (pending.generation_id) {
-          // Codex-style: permanent page for this turn exists before the answer ends.
-          writeAnswerPage(liveReportFromPending(pending, { status: 'in_progress' }));
-        }
-      } catch {
-        /* non-fatal */
-      }
+      touchLivePage(pending);
       reply({});
       return;
     }
 
     if (event === 'postToolUse') {
-      const pending = readSessionPending(conversationId);
-      const saved = readSessionPrompt(conversationId);
-      pending.conversation_id = conversationId || pending.conversation_id;
-      pending.prompt_preview = pending.prompt_preview || saved.prompt_preview;
-      pending.prompt_length = pending.prompt_length || saved.prompt_length || 0;
-      pending.generation_id = payload.generation_id || pending.generation_id || saved.generation_id;
-      pending.model = payload.model || payload.model_id || pending.model || saved.model;
+      const pending = hydratePending(conversationId, payload);
       const name = String(payload.tool_name || 'tool');
       const callTokens = estimate(payload.tool_input ?? '');
       const resultTokens = estimate(payload.tool_output ?? '');
@@ -133,36 +162,95 @@ async function main() {
         result_tokens: resultTokens,
         at: new Date().toISOString(),
       });
+      pushRequest(pending, {
+        at: new Date().toISOString(),
+        model: pending.model,
+        kind: 'tool_batch',
+      });
       writeSessionPending(conversationId, pending);
       if (pending.generation_id) setActive(conversationId, pending.generation_id);
+      touchLivePage(pending);
+      reply({});
+      return;
+    }
+
+    if (event === 'afterAgentThought') {
+      const pending = hydratePending(conversationId, payload);
+      const text = typeof payload.text === 'string' ? payload.text : '';
+      const tokens = estimate(text);
+      pending.reasoning_estimate = (Number(pending.reasoning_estimate) || 0) + tokens;
+      writeSessionPending(conversationId, pending);
+      if (pending.generation_id) setActive(conversationId, pending.generation_id);
+      touchLivePage(pending);
+      reply({});
+      return;
+    }
+
+    if (event === 'afterAgentResponse') {
+      const pending = hydratePending(conversationId, payload);
+      const text = typeof payload.text === 'string' ? payload.text : '';
+      add(pending.categories, 'conversation', estimate(text));
+      pushRequest(pending, {
+        at: new Date().toISOString(),
+        model: pending.model,
+        kind: 'assistant',
+      });
+      writeSessionPending(conversationId, pending);
+      if (pending.generation_id) setActive(conversationId, pending.generation_id);
+      touchLivePage(pending);
+      reply({});
+      return;
+    }
+
+    if (event === 'preCompact') {
+      const pending = hydratePending(conversationId, payload);
+      if (Number.isFinite(payload.context_tokens)) pending.context_tokens = payload.context_tokens;
+      writeSessionPending(conversationId, pending);
       reply({});
       return;
     }
 
     if (event === 'stop') {
-      const pending = readSessionPending(conversationId);
+      const pending = hydratePending(conversationId, payload);
       const savedPrompt = readSessionPrompt(conversationId || pending.conversation_id);
       const measured = measuredFromPayload(payload);
-      // Persist measured first (cached plan) — do not block on network plan fetch.
       let planUsage = readJson(CACHE_PATH, null);
       const generationId =
         payload.generation_id || pending.generation_id || savedPrompt.generation_id || null;
       const chatId = conversationId || pending.conversation_id;
       const prevTurn = findTurn(chatId, generationId);
+      const model = payload.model || payload.model_id || pending.model || savedPrompt.model || null;
+      const requests = Array.isArray(pending.requests) ? pending.requests.slice() : [];
+      if (measured) {
+        requests.push({
+          at: new Date().toISOString(),
+          model,
+          kind: 'stop_total',
+          input_tokens: measured.input_tokens,
+          output_tokens: measured.output_tokens,
+          cache_read_tokens: measured.cache_read_tokens,
+          cache_write_tokens: measured.cache_write_tokens,
+          reasoning_tokens: measured.reasoning_tokens,
+        });
+      }
       let report = mergeTurnReports(prevTurn, {
         at: new Date().toISOString(),
         conversation_id: chatId,
         generation_id: generationId,
-        model: payload.model || payload.model_id || pending.model || savedPrompt.model || null,
+        model,
         status: payload.status || null,
         prompt_preview: pending.prompt_preview || savedPrompt.prompt_preview || null,
         prompt_length: pending.prompt_length || savedPrompt.prompt_length || 0,
         measured,
-        categories: pending.categories || {},
+        categories: pending.categories || emptyCategories(),
         consumers: rank(pending.consumers || {}),
         tools: Array.isArray(pending.tools) ? pending.tools : [],
         tool_count: Array.isArray(pending.tools) ? pending.tools.length : 0,
-        estimate_method: 'UTF-8 bytes / 3 for tool args/results; measured totals from stop payload',
+        requests,
+        reasoning_estimate: Number(pending.reasoning_estimate) || 0,
+        context_tokens: pending.context_tokens == null ? null : pending.context_tokens,
+        estimate_method:
+          'UTF-8 bytes / 3 for instructions/history/schemas/tool I/O; measured totals from stop; Cursor does not expose per-step tokens',
         plan_usage: planUsage,
       });
       writeJson(LATEST_JSON, report);

@@ -10,8 +10,8 @@ const VERSION = require('../package.json').version;
 const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
 const metaPath = path.join(home, 'token-lens', `browser-server-${VERSION}.json`);
 
-function renderHtml(report, baseUrl = null, assetDir = __dirname) {
-  const data = JSON.stringify({ report, baseUrl }).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+function renderHtml(report, baseUrl = null, assetDir = __dirname, page = 'report') {
+  const data = JSON.stringify({ report, baseUrl, page }).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   return fs.readFileSync(path.join(assetDir, 'standalone.html'), 'utf8').replace('/* REPORT_DATA */', () => data);
 }
 function readMeta() { try { return JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch { return null; } }
@@ -25,13 +25,13 @@ async function healthy(meta) {
 }
 function createReportServer(store = createStore(), assetDir = __dirname, readLimits = getAccountLimits) {
   const secret = crypto.randomBytes(24).toString('hex');
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
-    if (req.method !== 'GET' || req.headers.host !== new URL(baseUrl).host || (req.headers.origin && req.headers.origin !== baseUrl)) {
+    if (!['GET', 'POST'].includes(req.method) || req.headers.host !== new URL(baseUrl).host || (req.headers.origin && req.headers.origin !== baseUrl) || (req.method === 'POST' && (req.headers.origin !== baseUrl || !req.headers['content-type']?.startsWith('application/json')))) {
       res.writeHead(403).end('Forbidden'); return;
     }
     try {
@@ -40,13 +40,31 @@ function createReportServer(store = createStore(), assetDir = __dirname, readLim
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ name: 'codex-token-lens', version: VERSION, secret })); return;
       }
+      const jsonResponse = value => { res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.end(JSON.stringify(value)); };
+      if (req.method === 'POST') {
+        if (!['/api/settings', '/api/reports/delete'].includes(url.pathname)) { res.writeHead(404).end('Not found'); return; }
+        let body = '';
+        for await (const chunk of req) { body += chunk; if (Buffer.byteLength(body) > 65536) { res.writeHead(413).end('Request too large'); return; } }
+        const input = JSON.parse(body);
+        jsonResponse(url.pathname === '/api/settings' ? store.saveSettings(input) : store.removeReports(input.reports)); return;
+      }
+      if (['/', '/reports', '/settings'].includes(url.pathname)) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(renderHtml(null, baseUrl, assetDir, url.pathname === '/settings' ? 'settings' : 'reports')); return;
+      }
+      if (url.pathname === '/api/reports') { jsonResponse(store.catalog({ offset: Number(url.searchParams.get('offset') || 0), limit: 50 })); return; }
+      if (url.pathname === '/api/settings') { jsonResponse(store.settings()); return; }
       if (!['/answer', '/api/report', '/export.json', '/export.html'].includes(url.pathname)) { res.writeHead(404).end('Not found'); return; }
       const report = { ...store.snapshot(url.searchParams.get('sessionId'), url.searchParams.get('turnId')), accountLimits: readLimits() };
       const json = ['/api/report', '/export.json'].includes(url.pathname);
       res.setHeader('Content-Type', json ? 'application/json; charset=utf-8' : 'text/html; charset=utf-8');
       if (url.pathname.startsWith('/export.')) res.setHeader('Content-Disposition', `attachment; filename="token-lens-${report.sessionId}-${report.turnId}.${json ? 'json' : 'html'}"`);
       res.end(json ? JSON.stringify(report, null, 2) : renderHtml(report, url.pathname === '/answer' ? baseUrl : null, assetDir));
-    } catch (error) { res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }).end(error.message); }
+    } catch (error) {
+      if (error.code === 'REPORT_DELETED' && req.url.startsWith('/answer?')) {
+        res.writeHead(410, { 'Content-Type': 'text/html; charset=utf-8' }).end('<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Отчёт удалён</title><body><h1>Отчёт удалён</h1><p>Отчёт скрыт в Token Lens. Журнал чата Codex сохранён.</p><a href="/reports">Все отчёты</a></body></html>');
+      } else res.writeHead(error.code === 'REPORT_DELETED' ? 410 : 400, { 'Content-Type': 'text/plain; charset=utf-8' }).end(error.message);
+    }
   });
   server.reportSecret = secret;
   return server;

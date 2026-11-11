@@ -14,6 +14,24 @@
         <div id="share-menu" class="share-menu" role="menu" aria-label="Экспорт отчёта" hidden><a id="download-html" role="menuitem" tabindex="-1" hidden>Скачать как HTML</a><a id="download-json" href="#" role="menuitem" tabindex="-1">Скачать как JSON</a></div>
       </div>
     </div></header>
+    <nav id="pages" class="toolbar" aria-label="Разделы Token Lens" hidden><button id="page-report" type="button" disabled>Отчёт</button><button id="page-reports" type="button">Все отчёты</button><button id="page-settings" type="button">Настройки</button></nav>
+    <section id="library" hidden aria-labelledby="library-title">
+      <h2 id="library-title">Все отчёты</h2><p class="muted">Ответы из локальных чатов Codex. Удаление скрывает отчёты в Token Lens; журналы чатов сохраняются.</p>
+      <div class="toolbar"><button id="library-refresh" type="button">Обновить</button><button id="delete-selected" type="button" disabled>Удалить выбранные</button><span id="library-count" class="muted"></span></div>
+      <p id="library-status" role="status"></p><div id="report-list" class="report-list"></div>
+      <div class="toolbar"><button id="library-prev" type="button" disabled>Назад</button><button id="library-next" type="button" disabled>Далее</button></div>
+      <div id="delete-confirm" class="confirm" hidden><p id="delete-message"></p><button id="confirm-delete" type="button">Удалить отчёты</button> <button id="cancel-delete" type="button">Отмена</button></div>
+    </section>
+    <section id="settings" hidden aria-labelledby="settings-title">
+      <h2 id="settings-title">Настройки</h2><form id="settings-form">
+        <label>Открывать ссылку в<select id="setting-view"><option value="mcp">Панели Codex</option><option value="browser">Браузере</option></select></label>
+        <label class="check"><input id="setting-limits" type="checkbox"> Добавлять лимиты аккаунта в конец ответа</label>
+        <label>Автоочистка отчётов старше, дней<input id="setting-days" type="number" min="0" max="3650" step="1" required></label>
+        <p class="muted">0 — выключена. Старые завершённые отчёты скрываются при просмотре. Журналы чатов Codex сохраняются. Существующие ссылки сохраняют прежний вид.</p>
+        <button id="settings-save" type="submit">Сохранить</button><p id="settings-status" role="status"></p>
+      </form>
+    </section>
+    <div id="answer-page">
     <p id="answer-title" class="muted"></p>
     <p id="status" role="status">Подключение к Codex…</p>
     <div id="content" hidden>
@@ -35,6 +53,7 @@
       <section class="section"><div class="section-title"><h2>Потребители: результаты инструментов</h2><span class="badge">Оценка входа</span></div><p class="muted">Входит в категорию «Результаты инструментов» выше. Вложенные инструменты внутри exec объединены под exec.</p><div id="consumers"></div></section>
       <section class="section"><div class="section-title"><h2>Запросы модели</h2><span id="request-count" class="badge"></span></div><div class="table-wrap"><table><thead><tr><th>Шаг / модель</th><th>Вход</th><th>Кэш¹</th><th>Выход</th></tr></thead><tbody id="requests"></tbody></table></div><p class="muted">¹ Кэш уже входит во вход. Рассуждения уже входят в выход.</p></section>
       <details><summary>Источник и точность</summary><p class="muted" id="source"></p><p class="muted">Скрытые инструкции, изменения схем, изображения и серверная подготовка контекста могут отсутствовать в журнале. Оценки категорий не обязаны совпадать с фактическими счётчиками. Формат журнала Codex может меняться.</p></details>
+    </div>
     </div>
     </div>
   </main>

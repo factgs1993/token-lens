@@ -1,6 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { createReportState } = require('./report-state.cjs');
+const { readConfig, writeConfig } = require('./config.cjs');
 
 const fields = ['input_tokens', 'cached_input_tokens', 'cache_write_input_tokens', 'output_tokens', 'reasoning_output_tokens', 'total_tokens'];
 const empty = () => Object.fromEntries(fields.map(key => [key, 0]));
@@ -130,6 +132,7 @@ function parseTranscript(text) {
 
 function createStore(codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex')) {
   const root = path.join(codexHome, 'sessions');
+  const state = createReportState(codexHome);
   let files = [];
   let scannedAt = 0;
   const cache = new Map();
@@ -179,11 +182,14 @@ function createStore(codexHome = process.env.CODEX_HOME || path.join(os.homedir(
     const data = report(sessionId);
     const turn = data.turns.find(turn => turn.id === turnId);
     if (!turn) throw new Error('Ответ не найден в журнале этого чата.');
+    if (!state.visible(sessionId, [turn]).length) throw Object.assign(new Error('Отчёт удалён из Token Lens. Журнал чата сохранён.'), { code: 'REPORT_DELETED' });
     return { sessionId, turn, source: data.source, malformedLines: data.malformedLines, estimateMethod: data.estimateMethod };
   }
   function snapshot(sessionId, turnId) {
     if (!validId(turnId)) throw new Error('Некорректный ID ответа.');
-    const data = report(sessionId);
+    const raw = report(sessionId);
+    const data = { ...raw, turns: state.visible(sessionId, raw.turns) };
+    if (state.deleted(sessionId, turnId)) throw Object.assign(new Error('Отчёт удалён из Token Lens. Журнал чата сохранён.'), { code: 'REPORT_DELETED' });
     if (!data.turns.some(turn => turn.id === turnId)) throw new Error('Ответ не найден в журнале этого чата.');
     const measured = data.turns.filter(turn => turn.hasUsage);
     const totals = empty();
@@ -192,7 +198,28 @@ function createStore(codexHome = process.env.CODEX_HOME || path.join(os.homedir(
       summary: { totals: measured.length ? totals : null, turnCount: data.turns.length, measuredTurnCount: measured.length,
         missingUsageTurns: data.turns.length - measured.length, runningTurns: data.turns.filter(turn => turn.status === 'running').length } };
   }
-  return { list, report, answer, snapshot };
+  function catalog({ offset = 0, limit = 50 } = {}) {
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new Error('Некорректная страница отчётов.');
+    scan();
+    const reports = [], errors = [];
+    for (const file of files) {
+      const sessionId = file.name.match(/([a-f0-9]{8}-[a-f0-9-]{27,})\.jsonl$/i)?.[1];
+      if (!sessionId) continue;
+      try {
+        for (const turn of state.visible(sessionId, report(sessionId).turns)) reports.push({ sessionId, turnId: turn.id, label: turn.label, at: turn.startedAt || turn.requests[0]?.at || new Date(file.mtime).toISOString(), status: turn.status, totalTokens: turn.hasUsage ? turn.usage.total_tokens : null });
+      } catch (error) { errors.push({ sessionId, error: error.message }); }
+    }
+    reports.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || a.turnId.localeCompare(b.turnId));
+    return { reports: reports.slice(offset, offset + limit), total: reports.length, offset, limit, hasMore: offset + limit < reports.length, errors };
+  }
+  function removeReports(reports) {
+    if (!Array.isArray(reports) || !reports.length || reports.length > 200) throw new Error('Выберите от 1 до 200 отчётов.');
+    for (const row of reports) {
+      if (!validId(row?.turnId) || !report(row?.sessionId).turns.some(turn => turn.id === row.turnId)) throw new Error('Отчёт не найден.');
+    }
+    return state.remove(reports);
+  }
+  return { list, report, answer, snapshot, catalog, removeReports, settings: () => readConfig(codexHome), saveSettings: patch => writeConfig(patch, codexHome) };
 }
 
 module.exports = { parseTranscript, createStore, normalizeUsage };

@@ -1,12 +1,13 @@
 {
   "name": "cursor-token-lens",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test test/*.test.cjs && node scripts/tests/hardening.cjs"
+    "test": "node --test test/*.test.cjs && node scripts/tests/hardening.cjs",
+    "test:ui": "node test/ui-check.cjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

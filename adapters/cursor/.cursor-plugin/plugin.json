@@ -1,10 +1,15 @@
 {
   "name": "cursor-token-lens",
-  "version": "0.2.1",
-  "description": "Как в Codex: ссылка «📊 Аналитика…» на локальный HTML-отчёт, All Reports / Settings, лимиты подписки и автоудаление.",
+  "version": "0.3.0",
+  "description": "Как в Codex: HTML-отчёт с шагами, reasoning, категориями контекста, историей чата, export и live-обновлением; плюс All Reports / Settings.",
   "author": {
     "name": "Owl Assist"
   },
   "license": "MIT",
-  "keywords": ["tokens", "usage", "cost", "observability"]
+  "keywords": [
+    "tokens",
+    "usage",
+    "cost",
+    "observability"
+  ]
 }

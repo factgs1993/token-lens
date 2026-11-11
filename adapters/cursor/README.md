@@ -2,19 +2,25 @@
 
 Локальный анализатор расхода токенов: ссылка «📊 Аналитика запроса/ответа», HTML-отчёты на `http://127.0.0.1:3847/`, оценка потребителей инструментов, лимиты подписки и необязательная панель со строкой состояния.
 
-Версия плагина и MCP-сервера — **0.2.1**; отдельного IDE-расширения — 0.1.2. Лицензия адаптера — [MIT](LICENSE).
+Версия плагина и MCP-сервера — **0.3.0**; отдельного IDE-расширения — 0.1.2. Лицензия адаптера — [MIT](LICENSE).
 
-## Что умеет 0.2.1
+## Что умеет 0.3.0
 
-- Per-answer HTML-отчёт: measured input/output/cache, потребители, preview запроса, лимиты подписки
+- Per-answer HTML-отчёт: measured input/output/cache, поле reasoning, потребители, preview запроса, лимиты подписки
+- Таблица шагов модели (границы `afterAgentResponse` / tool batch); **токены только у строки `stop_total`** — Cursor не отдаёт per-request usage в hooks
+- Оценка категорий входа: инструкции, история/запрос, схемы инструментов, tool args/results (UTF-8/3, не биллинг)
+- История ходов и итоги чата **в самом HTML-отчёте**
+- **Поделиться** → HTML/JSON со снимком всех ходов чата + выбранный ответ; автономный HTML без сервера
+- Live-обновление открытого отчёта каждые 4 секунды
 - **All Reports** — таблица отчётов, мультивыбор и удаление; страница «отчёт удалён»
 - **Settings** — автоудаление старше N дней; опция «писать лимиты подписки в хвост ответа»
-- Hooks: `beforeSubmitPrompt` / `postToolUse` / `stop` (+ автоподъём сервера)
+- Hooks: `beforeSubmitPrompt` / `postToolUse` / `afterAgentThought` / `afterAgentResponse` / `preCompact` / `stop`
 - MCP: `token_usage_panel`, `read_token_usage`
 - Rule + skill: агент дописывает markdown-ссылку (и лимиты, если включено) в конце ответа
-- Устойчивая запись JSON на Windows (overwrite без `EPERM` на `rename`)
 
 Вход/выход текущего хода в **чате до `stop` недоступны** — они появляются в HTML после `stop`. В хвост ответа цифры ↓/↑ намеренно не дублируются.
+
+**Reasoning:** measured только если Cursor передал поле в `stop`; иначе показывается оценка размера thinking из `afterAgentThought` (не billable). Схемы — оценка каталога builtin-tools + `mcp.json`, не точный wire payload.
 
 ## Установка
 
@@ -63,7 +69,7 @@ node scripts/enable-default.cjs
 node scripts/serve.cjs --status
 ```
 
-Ожидается `running: true`. Откройте [http://127.0.0.1:3847/](http://127.0.0.1:3847/) — **All Reports**. Из любого отчёта: **Settings** (автоудаление и лимиты в хвосте ответа).
+Ожидается `running: true`. Откройте [http://127.0.0.1:3847/](http://127.0.0.1:3847/) — **All Reports**. Из любого отчёта: **Settings** (автоудаление и лимиты в хвосте ответа), **Поделиться** (HTML/JSON).
 
 В новом чате отправьте короткий запрос и дождитесь завершения. После `stop` в списке появится HTML-страница; ссылка из ответа агента открывает её в браузере. Если Cursor не передал счётчики токенов, отчёт покажет их отсутствие, а не нулевой расход.
 
@@ -101,11 +107,12 @@ node scripts/serve.cjs --stop
 
 ## Данные и ограничения
 
-- `beforeSubmitPrompt` сохраняет превью первых 200 символов запроса.
-- `postToolUse` оценивает tool I/O как UTF-8 байт / 3 (не биллинг).
-- Measured totals — из payload `stop`, если Cursor их передал.
+- `beforeSubmitPrompt` сохраняет превью первых 200 символов запроса и оценку инструкций/схем/истории.
+- `postToolUse` / `afterAgentResponse` / `afterAgentThought` дополняют категории и шаги.
+- Measured totals — из payload `stop`, если Cursor их передал; per-step tokens Cursor IDE hooks не отдают.
 - `stop` сохраняет отчёт и HTML **без** автоматического follow-up в чат.
 - Параллельные чаты изолированы по `sessions/<conversation_id>/`; история — до 200 ходов на чат, индекс — 50 чатов.
 - Журналы и HTML — в `~/.cursor/token-lens/`; сервер отдаёт этот каталог по localhost.
+- Экспорт включает превью запросов и агрегаты; полные tool outputs не экспортируются.
 
 Состав: `.cursor-plugin/`, `hooks/`, `scripts/`, `mcp/`, `rules/`, `commands/`, `skills/`, `extension/`, `test/`. Тесты: `npm test`.

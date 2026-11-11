@@ -18,7 +18,7 @@ Immediately before each final answer, run this local helper once using the shell
 
     node "${helper}"
 
-Append the returned \`markdown\` value unchanged on the last line of the final answer. It is labelled “📊 Токены этого ответа” and binds the current chat and turn. Do not reuse a link from an earlier answer, invent IDs, require a plugin mention, or open the report automatically. The helper uses CODEX_THREAD_ID; the report opens locally without a model request. If the helper fails, state the specific failure briefly instead of fabricating counts or a link.
+Append the returned \`markdown\` value unchanged on the last line of the final answer. It is labelled “📊 Аналитика запроса/ответа” and binds the current chat and turn. Do not reuse a link from an earlier answer, invent IDs, require a plugin mention, or open the report automatically. The helper uses CODEX_THREAD_ID; the report opens locally without a model request. If the helper fails, state the specific failure briefly instead of fabricating counts or a link.
 
 The helper chooses one destination from token-lens/config.json (reportView: mcp or browser). Append exactly that one link; do not add a second HTML link.
 ${end}`;

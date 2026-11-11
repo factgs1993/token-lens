@@ -9,8 +9,8 @@ import limits from './limits.cjs';
 
 const store = usage.createStore();
 const resourceUri = 'ui://codex-token-lens/panel.html';
-const server = new McpServer({ name: 'codex-token-lens', version: '0.3.0' }, {
-  instructions: 'When this plugin is active, append exactly the one Markdown link returned by the bundled answer-link helper, labelled “📊 Токены этого ответа”. Its destination follows reportView in the local token-lens/config.json (mcp or browser). Do not add a second HTML link. Use the token-report skill to bind the current Codex session and turn; do not guess IDs. Opening the report does not start a model turn. Treat consumer estimates separately from measured counters.'
+const server = new McpServer({ name: 'codex-token-lens', version: '0.4.0' }, {
+  instructions: 'When this plugin is active, append exactly the one Markdown link returned by the bundled answer-link helper, labelled “📊 Аналитика запроса/ответа”. Its destination follows reportView in the local token-lens/config.json (mcp or browser). Do not add a second HTML link. Use the token-report skill to bind the current Codex session and turn; do not guess IDs. Opening the report does not start a model turn. Treat consumer estimates separately from measured counters.'
 });
 const annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const result = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data });
@@ -49,5 +49,24 @@ server.registerTool('read_token_report', {
   try { baseUrl = await browser.ensureReportServer(); } catch (error) { console.error(error.message); }
   return result({ report, baseUrl });
 });
+
+server.registerTool('list_token_reports', {
+  title: 'Все отчёты Token Lens', description: 'List local answer summaries across chats. Deleted reports are excluded.',
+  inputSchema: { offset: z.number().int().min(0).optional() }, annotations, _meta: { ui: { visibility: ['app'] } }
+}, async input => result(store.catalog(input)));
+server.registerTool('read_token_settings', {
+  title: 'Настройки Token Lens', description: 'Read report view, footer and report retention settings.',
+  inputSchema: {}, annotations, _meta: { ui: { visibility: ['app'] } }
+}, async () => result(store.settings()));
+server.registerTool('save_token_settings', {
+  title: 'Сохранить настройки Token Lens', description: 'Save settings chosen in the app. Retention hides old reports without deleting Codex journals.',
+  inputSchema: { reportView: z.enum(['mcp', 'browser']), appendPlanLimits: z.boolean(), autoDeleteDays: z.number().int().min(0).max(3650) },
+  annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }, _meta: { ui: { visibility: ['app'] } }
+}, async input => result(store.saveSettings(input)));
+server.registerTool('delete_token_reports', {
+  title: 'Удалить выбранные отчёты', description: 'Hide selected Token Lens reports after confirmation in the UI. Codex session journals are preserved.',
+  inputSchema: { reports: z.array(z.object({ sessionId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/), turnId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/) })).min(1).max(200) },
+  annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }, _meta: { ui: { visibility: ['app'] } }
+}, async input => result(store.removeReports(input.reports)));
 
 server.connect(new StdioServerTransport()).catch(error => { console.error(error.message); process.exitCode = 1; });

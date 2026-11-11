@@ -467,11 +467,37 @@ async function status() {
 }
 
 async function handleRequest(req, res) {
+  if (req.headers.host !== new URL(baseUrl()).host || (req.headers.origin && req.headers.origin !== baseUrl()) || (req.method === 'POST' && (req.headers.origin !== baseUrl() || !req.headers['content-type']?.startsWith('application/json')))) { res.writeHead(403).end('Forbidden'); return; }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
   const url = new URL(req.url || '/', baseUrl());
   let rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
   if (!rel || rel === '/') rel = 'index.html';
   if (rel.includes('..')) {
     res.writeHead(400).end('bad path');
+    return;
+  }
+  if (['api/answer', 'export.html', 'export.json'].includes(rel)) {
+    if (req.method !== 'GET') { res.writeHead(405).end('Method not allowed'); return; }
+    const key = safeAnswerKey(url.searchParams.get('key'));
+    if (!key) { res.writeHead(400).end('Invalid report key'); return; }
+    const report = readJson(path.join(ANSWERS_DIR, `${key}.json`), null);
+    if (!report) { res.writeHead(410).end('Отчёт удалён или недоступен.'); return; }
+    if (rel === 'api/answer') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(report));
+      return;
+    }
+    const snapshot = lib.buildExportSnapshot(report, { offline: true });
+    const html = rel === 'export.html';
+    const headers = { 'Content-Type': html ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
+    headers['Content-Disposition'] = `attachment; filename="token-lens-${key}.${html ? 'html' : 'json'}"`;
+    res
+      .writeHead(200, headers)
+      .end(
+        html
+          ? require('./answer-page.cjs').renderAnswerHtml(report, { offline: true, snapshot })
+          : JSON.stringify(snapshot, null, 2)
+      );
     return;
   }
 
@@ -593,7 +619,8 @@ async function handleRequest(req, res) {
   let body = fs.readFileSync(real);
   if (rel.startsWith('answers/') && rel.endsWith('.html')) {
     const key = safeAnswerKey(path.basename(rel, '.html'));
-    body = Buffer.from(decorateAnswerHtml(body.toString('utf8'), key), 'utf8');
+    const report = key && readJson(path.join(ANSWERS_DIR, `${key}.json`), null);
+    body = Buffer.from(decorateAnswerHtml(report ? require('./answer-page.cjs').renderAnswerHtml(report) : body.toString('utf8'), key), 'utf8');
   }
   res.writeHead(200, headers).end(body);
 }

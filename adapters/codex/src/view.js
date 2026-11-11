@@ -109,7 +109,7 @@ export function createReportView({ getReport, openExternal, live = true }) {
       if (ticket !== generation) return;
       if (result.report.sessionId !== binding.sessionId || result.report.turnId !== binding.turnId) throw new Error('Отчёт относится к другому ответу.');
       data = result.report; baseUrl = result.baseUrl; render(); $('live').textContent = live ? 'Обновляется' : 'Сохранённый отчёт';
-    } catch(error) { if (ticket === generation) { $('status').textContent = error.message; $('live').textContent = 'Ошибка'; } }
+    } catch(error) { if (ticket === generation) { $('content').hidden = true; shareButton.disabled = true; $('status').textContent = error.message; $('live').textContent = 'Ошибка'; } }
     finally { loading = false; }
   }
   if (live) setInterval(() => { if (!document.hidden) refresh(); }, 4000);

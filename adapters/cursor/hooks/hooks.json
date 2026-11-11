@@ -21,6 +21,21 @@
         "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/hook.cjs\""
       }
     ],
+    "afterAgentThought": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/hook.cjs\""
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/hook.cjs\""
+      }
+    ],
+    "preCompact": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/hook.cjs\""
+      }
+    ],
     "stop": [
       {
         "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/hook.cjs\""

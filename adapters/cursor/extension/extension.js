@@ -79,14 +79,21 @@ function renderHtml(state) {
         .join('')
     : '<tr><td colspan="2">Нет оценки по инструментам за этот ход</td></tr>';
 
+  const reasoningHint =
+    m && m.reasoning_tokens != null
+      ? `measured ${formatNum(m.reasoning_tokens)}`
+      : turn && turn.reasoning_estimate
+        ? `оценка ≈ ${formatNum(turn.reasoning_estimate)}`
+        : 'нет данных';
   const measuredBlock = m
     ? `<div class="metrics">
         ${metricCard('Вход', formatNum(m.input_tokens), 'включая cache')}
         ${metricCard('Без кэша', formatNum(m.uncached_input_tokens), 'input − cache')}
         ${metricCard('Выход', formatNum(m.output_tokens), 'completion')}
+        ${metricCard('Рассуждения', m.reasoning_tokens == null ? '—' : formatNum(m.reasoning_tokens), reasoningHint)}
         ${metricCard('Всего', formatNum(m.total_tokens), 'ход')}
       </div>
-      <div class="muted">cache read ${escapeHtml(formatNum(m.cache_read_tokens))} · cache write ${escapeHtml(formatNum(m.cache_write_tokens))}</div>`
+      <div class="muted">cache read ${escapeHtml(formatNum(m.cache_read_tokens))} · cache write ${escapeHtml(formatNum(m.cache_write_tokens))} · шагов ${(turn && turn.requests && turn.requests.length) || 0}</div>`
     : '<p class="empty">В payload stop не было полей токенов.</p>';
 
   return `<!DOCTYPE html>
@@ -136,6 +143,9 @@ function renderHtml(state) {
   <h2>Категории</h2>
   <table>
     <tbody>
+      <tr><td>Инструкции</td><td>${escapeHtml(formatNum(cats.instructions || 0))}</td></tr>
+      <tr><td>История / запрос</td><td>${escapeHtml(formatNum(cats.conversation || 0))}</td></tr>
+      <tr><td>Схемы инструментов</td><td>${escapeHtml(formatNum(cats.schemas || 0))}</td></tr>
       <tr><td>Результаты инструментов</td><td>${escapeHtml(formatNum(cats.tool_results || 0))}</td></tr>
       <tr><td>Вызовы инструментов</td><td>${escapeHtml(formatNum(cats.tool_calls || 0))}</td></tr>
     </tbody>

@@ -1,6 +1,6 @@
 {
   "name": "codex-token-lens",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Local Codex token usage by answer, with measured totals and estimated context consumers.",
   "type": "module",
@@ -11,7 +11,7 @@
     "build": "node build.mjs",
     "pretest": "node build.mjs",
     "test": "node --test test/*.test.cjs",
-    "test:ui": "node test/ui-check.cjs"
+    "test:ui": "node test/ui-check.cjs && node test/library-ui.cjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

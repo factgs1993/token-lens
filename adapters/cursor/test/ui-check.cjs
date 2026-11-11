@@ -1,0 +1,54 @@
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const net = require('node:net');
+const { spawn } = require('node:child_process');
+const { pathToFileURL } = require('node:url');
+const assert = require('node:assert/strict');
+const { chromium } = require(require.resolve('playwright', { paths: [path.join(__dirname, '../../codex')] }));
+(async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-token-lens-ui-'));
+  const answers = path.join(home, '.cursor/token-lens/answers'); fs.mkdirSync(answers, { recursive: true });
+  const report = { at: new Date().toISOString(), generation_id: 'test-1', conversation_id: 'chat-1', status: 'in_progress', prompt_preview: '</script><img src=x onerror=alert(1)>', measured: null, plan_usage: { error: 'test unavailable' } };
+  const file = path.join(answers, 'test-1.json');
+  fs.writeFileSync(file, JSON.stringify(report)); fs.writeFileSync(path.join(answers, 'test-1.html'), 'old report');
+  const probe = net.createServer(); await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
+  const port = probe.address().port; await new Promise(resolve => probe.close(resolve));
+  const child = spawn(process.execPath, [path.join(__dirname, '../scripts/serve.cjs'), '--serve'], { env: { ...process.env, USERPROFILE: home, HOME: home, TOKEN_LENS_PORT: String(port) }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const browser = await chromium.launch({ headless: true }), base = `http://127.0.0.1:${port}`;
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Cursor report server did not start')), 10000);
+      child.stdout.once('data', () => { clearTimeout(timer); resolve(); }); child.once('error', reject);
+    });
+    const page = await browser.newPage({ viewport: { width: 375, height: 950 } }), errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(base + '/answers/test-1.html');
+    assert.equal(await page.locator('.prompt img').count(), 0);
+    assert.ok((await page.locator('body').textContent()).includes('in_progress'));
+    report.status = 'completed'; report.measured = { input_tokens: 100, output_tokens: 20, total_tokens: 120, cache_read_tokens: 40, uncached_input_tokens: 60 };
+    fs.writeFileSync(file, JSON.stringify(report));
+    await page.locator('#total').filter({ hasText: '120' }).waitFor({ timeout: 12000 });
+    await page.locator('.share summary').click();
+    const jsonPending = page.waitForEvent('download'); await page.getByText('Скачать как JSON', { exact: true }).click();
+    assert.equal(JSON.parse(fs.readFileSync(await (await jsonPending).path(), 'utf8')).selected.measured.total_tokens, 120);
+    const htmlPending = page.waitForEvent('download'); await page.getByText('Скачать как HTML', { exact: true }).click();
+    const offlineFile = path.join(home, 'export.html'); await (await htmlPending).saveAs(offlineFile);
+    assert.equal(await page.locator('html').evaluate(el => el.scrollWidth > el.clientWidth), false);
+    await page.screenshot({ path: 'test/panel-cursor-mobile.png', fullPage: true });
+    const offline = await browser.newPage(), requests = [];
+    offline.on('request', req => requests.push(req.url())); offline.on('pageerror', error => errors.push(error.message));
+    await offline.goto(pathToFileURL(offlineFile).href);
+    await offline.locator('.share summary').click();
+    const exportPending = offline.waitForEvent('download'); await offline.locator('#offline-json').click();
+    assert.equal(JSON.parse(fs.readFileSync(await (await exportPending).path(), 'utf8')).generation_id, 'test-1');
+    assert.equal(requests.filter(url => /^https?:/.test(url)).length, 0);
+    assert.equal((await fetch(base + '/api/answer?key=../test')).status, 400);
+    assert.equal((await fetch(base + '/export.json?key=test-1', { headers: { Origin: 'https://evil.invalid' } })).status, 403);
+    fs.unlinkSync(file); fs.unlinkSync(path.join(answers, 'test-1.html'));
+    await page.getByRole('heading', { name: 'Отчёт удалён' }).waitFor({ timeout: 12000 });
+    assert.equal((await fetch(base + '/export.json?key=test-1')).status, 410);
+    assert.deepEqual(errors, []);
+    console.log('PASS Cursor UI: live final counters, safe HTML/JSON exports, offline JSON without requests, deleted reports and mobile layout.');
+  } finally { child.kill(); await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

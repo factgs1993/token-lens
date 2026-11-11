@@ -12,6 +12,8 @@ test('cached panel URIs and the current entrypoint return the same built UI', as
     const panel = tools.find(tool => tool.name === 'token_usage_panel');
     assert.equal(panel._meta.ui.resourceUri, 'ui://codex-token-lens/panel.html');
     assert.deepEqual(tools.find(tool => tool.name === 'read_token_report')._meta.ui.visibility, ['app']);
+    for (const name of ['list_token_reports', 'read_token_settings', 'save_token_settings', 'delete_token_reports']) assert.deepEqual(tools.find(tool => tool.name === name)._meta.ui.visibility, ['app']);
+    assert.equal(tools.find(tool => tool.name === 'delete_token_reports').annotations.readOnlyHint, false);
     const content = [];
     for (const uri of ['ui://codex-token-lens/panel.html', 'ui://codex-token-lens/panel-v0.1.2.html']) {
       const result = await client.readResource({ uri });

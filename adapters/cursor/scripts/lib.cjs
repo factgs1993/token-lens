@@ -172,6 +172,26 @@ function clearSessionPending(conversationId) {
   writeSessionPending(conversationId, emptyPending(conversationId));
 }
 
+const CATEGORY_KEYS = ['instructions', 'conversation', 'schemas', 'tool_calls', 'tool_results'];
+
+function emptyCategories() {
+  return {
+    instructions: 0,
+    conversation: 0,
+    schemas: 0,
+    tool_calls: 0,
+    tool_results: 0,
+  };
+}
+
+function mergeCategories(prev, next) {
+  const out = emptyCategories();
+  for (const key of CATEGORY_KEYS) {
+    out[key] = Math.max(Number(prev && prev[key]) || 0, Number(next && next[key]) || 0);
+  }
+  return out;
+}
+
 function measuredFromPayload(payload) {
   const input = num(payload.input_tokens);
   const output = num(payload.output_tokens);
@@ -179,6 +199,10 @@ function measuredFromPayload(payload) {
 
   const cacheRead = num(payload.cache_read_tokens);
   const cacheWrite = num(payload.cache_write_tokens);
+  const reasoning =
+    num(payload.reasoning_tokens) ??
+    num(payload.reasoning_output_tokens) ??
+    null;
   const incomplete = input == null || output == null;
   const uncached =
     input == null
@@ -191,6 +215,7 @@ function measuredFromPayload(payload) {
     cache_read_tokens: cacheRead,
     cache_write_tokens: cacheWrite,
     uncached_input_tokens: uncached,
+    reasoning_tokens: reasoning,
     total_tokens: input != null && output != null ? input + output : null,
     incomplete,
   };
@@ -205,11 +230,11 @@ function emptyPending(conversationId) {
     prompt_preview: null,
     prompt_length: 0,
     consumers: {},
-    categories: {
-      tool_results: 0,
-      tool_calls: 0,
-    },
+    categories: emptyCategories(),
     tools: [],
+    requests: [],
+    reasoning_estimate: 0,
+    context_tokens: null,
   };
 }
 
@@ -224,12 +249,175 @@ function liveReportFromPending(pending, extras = {}) {
     prompt_preview: row.prompt_preview || null,
     prompt_length: row.prompt_length || 0,
     measured: extras.measured || null,
-    categories: row.categories || {},
+    categories: { ...emptyCategories(), ...(row.categories || {}) },
     consumers: Array.isArray(extras.consumers)
       ? extras.consumers
       : rank(row.consumers || {}),
+    tools: Array.isArray(row.tools) ? row.tools : [],
     tool_count: Array.isArray(row.tools) ? row.tools.length : 0,
-    estimate_method: 'UTF-8 bytes / 3 for tool args/results; measured totals from stop payload',
+    requests: Array.isArray(row.requests) ? row.requests : [],
+    reasoning_estimate: Number(row.reasoning_estimate) || 0,
+    context_tokens: row.context_tokens == null ? null : row.context_tokens,
+    estimate_method:
+      'UTF-8 bytes / 3 for instructions/history/schemas/tool I/O; measured totals from stop; Cursor does not expose per-step tokens',
+  };
+}
+
+const MAX_ESTIMATE_FILES = 48;
+const MAX_ESTIMATE_BYTES = 64 * 1024;
+
+function readBoundedFile(file) {
+  try {
+    const stat = fs.statSync(file);
+    if (!stat.isFile() || stat.size <= 0) return '';
+    const fd = fs.openSync(file, 'r');
+    try {
+      const size = Math.min(stat.size, MAX_ESTIMATE_BYTES);
+      const buf = Buffer.alloc(size);
+      fs.readSync(fd, buf, 0, size, 0);
+      return buf.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return '';
+  }
+}
+
+function collectRuleFiles(dir, out) {
+  if (!dir || out.length >= MAX_ESTIMATE_FILES) return;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (out.length >= MAX_ESTIMATE_FILES) break;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      collectRuleFiles(full, out);
+    } else if (/\.(mdc|md|txt)$/i.test(entry.name)) {
+      out.push(full);
+    }
+  }
+}
+
+function estimateInstructions(workspaceRoots = []) {
+  const files = [];
+  const roots = [
+    path.join(os.homedir(), '.cursor', 'rules'),
+    path.join(os.homedir(), '.cursor', 'plugins', 'local'),
+    ...((Array.isArray(workspaceRoots) ? workspaceRoots : [])
+      .filter((root) => typeof root === 'string' && root)
+      .map((root) => path.join(root, '.cursor', 'rules'))),
+  ];
+  for (const root of roots) collectRuleFiles(root, files);
+  let tokens = 0;
+  for (const file of files.slice(0, MAX_ESTIMATE_FILES)) {
+    const text = readBoundedFile(file);
+    if (text) tokens += estimate(text);
+  }
+  return tokens;
+}
+
+// Compact published descriptor shapes — estimate of catalog size, not Cursor's exact wire payload.
+const BUILTIN_TOOL_SCHEMAS = [
+  { name: 'Shell', parameters: { command: 'string', working_directory: 'string', description: 'string', block_until_ms: 'number' } },
+  { name: 'Read', parameters: { path: 'string', offset: 'number', limit: 'number' } },
+  { name: 'Write', parameters: { path: 'string', contents: 'string' } },
+  { name: 'StrReplace', parameters: { path: 'string', old_string: 'string', new_string: 'string', replace_all: 'boolean' } },
+  { name: 'Glob', parameters: { glob_pattern: 'string', target_directory: 'string' } },
+  { name: 'Grep', parameters: { pattern: 'string', path: 'string', glob: 'string', output_mode: 'string' } },
+  { name: 'Task', parameters: { description: 'string', prompt: 'string', subagent_type: 'string' } },
+  { name: 'WebSearch', parameters: { search_term: 'string', explanation: 'string' } },
+  { name: 'WebFetch', parameters: { url: 'string' } },
+  { name: 'Delete', parameters: { path: 'string' } },
+  { name: 'EditNotebook', parameters: { target_notebook: 'string', cell_id: 'string', new_source: 'string' } },
+  { name: 'AwaitShell', parameters: { task_id: 'string', block_until_ms: 'number' } },
+];
+
+function estimateSchemas() {
+  let tokens = estimate(BUILTIN_TOOL_SCHEMAS);
+  const mcpPath = path.join(os.homedir(), '.cursor', 'mcp.json');
+  const mcp = readJson(mcpPath, null);
+  if (mcp && typeof mcp === 'object') tokens += estimate(mcp);
+  return tokens;
+}
+
+function estimateConversationContext(conversationId, promptText) {
+  let tokens = estimate(promptText || '');
+  const chat = loadChat(conversationId);
+  if (!chat || !Array.isArray(chat.turns)) return tokens;
+  for (const turn of chat.turns) {
+    if (!turn) continue;
+    if (turn.prompt_preview) tokens += estimate(turn.prompt_preview);
+  }
+  return tokens;
+}
+
+function pushRequest(pending, row) {
+  if (!pending.requests) pending.requests = [];
+  pending.requests.push({
+    at: row.at || new Date().toISOString(),
+    model: row.model || pending.model || null,
+    kind: row.kind || 'step',
+    input_tokens: row.input_tokens == null ? null : row.input_tokens,
+    output_tokens: row.output_tokens == null ? null : row.output_tokens,
+    cache_read_tokens: row.cache_read_tokens == null ? null : row.cache_read_tokens,
+    cache_write_tokens: row.cache_write_tokens == null ? null : row.cache_write_tokens,
+    reasoning_tokens: row.reasoning_tokens == null ? null : row.reasoning_tokens,
+  });
+}
+
+function buildChatSummary(chat) {
+  const turns = chat && Array.isArray(chat.turns) ? chat.turns : [];
+  const totals = sumMeasured(turns);
+  let measuredTurnCount = 0;
+  let missingUsageTurns = 0;
+  let runningTurns = 0;
+  for (const turn of turns) {
+    if (turn && turn.status === 'in_progress') runningTurns += 1;
+    if (turn && turn.measured) measuredTurnCount += 1;
+    else missingUsageTurns += 1;
+  }
+  return {
+    totals,
+    turnCount: turns.length,
+    measuredTurnCount,
+    missingUsageTurns,
+    runningTurns,
+  };
+}
+
+function buildExportSnapshot(report, { offline = false } = {}) {
+  const chat = loadChat(report && report.conversation_id);
+  const turns = chat && Array.isArray(chat.turns) ? chat.turns : report ? [report] : [];
+  const key = report && (report.generation_id || report.key) ? String(report.generation_id || report.key) : null;
+  const compactTurns = turns.map((turn) => ({
+    generation_id: turn.generation_id || null,
+    at: turn.at || null,
+    status: turn.status || null,
+    model: turn.model || null,
+    prompt_preview: turn.prompt_preview || null,
+    prompt_length: turn.prompt_length || 0,
+    measured: turn.measured || null,
+    categories: turn.categories || emptyCategories(),
+    consumers: turn.consumers || [],
+    requests: Array.isArray(turn.requests) ? turn.requests : [],
+    reasoning_estimate: Number(turn.reasoning_estimate) || 0,
+    tool_count: turn.tool_count || 0,
+  }));
+  return {
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    offline: !!offline,
+    conversation_id: (report && report.conversation_id) || (chat && chat.conversation_id) || null,
+    generation_id: key,
+    selected: report || null,
+    turns: compactTurns,
+    summary: buildChatSummary({ turns }),
   };
 }
 
@@ -294,6 +482,7 @@ function sumMeasured(turns) {
     cache_read_tokens: 0,
     cache_write_tokens: 0,
     uncached_input_tokens: 0,
+    reasoning_tokens: 0,
     total_tokens: 0,
   };
   for (const turn of turns) {
@@ -318,18 +507,19 @@ function hasConsumers(report) {
 function mergeTurnReports(prev, next) {
   if (!prev) return next;
   if (!next) return prev;
-  const prevCats = prev.categories || {};
-  const nextCats = next.categories || {};
-  const categories = {
-    tool_results: Math.max(Number(nextCats.tool_results) || 0, Number(prevCats.tool_results) || 0),
-    tool_calls: Math.max(Number(nextCats.tool_calls) || 0, Number(prevCats.tool_calls) || 0),
-  };
+  const categories = mergeCategories(prev.categories, next.categories);
   const consumers = hasConsumers(next) ? next.consumers : prev.consumers || [];
   const tools =
     Array.isArray(next.tools) && next.tools.length
       ? next.tools
       : Array.isArray(prev.tools)
         ? prev.tools
+        : [];
+  const requests =
+    Array.isArray(next.requests) && next.requests.length
+      ? next.requests
+      : Array.isArray(prev.requests)
+        ? prev.requests
         : [];
   return {
     ...prev,
@@ -341,6 +531,10 @@ function mergeTurnReports(prev, next) {
     consumers,
     categories,
     tools,
+    requests,
+    reasoning_estimate: Math.max(Number(next.reasoning_estimate) || 0, Number(prev.reasoning_estimate) || 0),
+    context_tokens:
+      next.context_tokens != null ? next.context_tokens : prev.context_tokens != null ? prev.context_tokens : null,
     tool_count: Array.isArray(tools) ? tools.length : next.tool_count || prev.tool_count || 0,
   };
 }
@@ -659,9 +853,13 @@ function renderMarkdown(report) {
       `| · cache read | ${formatNum(m.cache_read_tokens)} |`,
       `| · cache write | ${formatNum(m.cache_write_tokens)} |`,
       `| **Выход** | ${formatNum(m.output_tokens)} |`,
+      `| · рассуждения (measured) | ${m.reasoning_tokens == null ? 'нет данных' : formatNum(m.reasoning_tokens)} |`,
       `| **Всего** | ${m.incomplete ? 'неполный' : formatNum(m.total_tokens)} |`,
       ''
     );
+  }
+  if (report.reasoning_estimate) {
+    lines.push(`_Оценка thinking (UTF-8/3): ${formatNum(report.reasoning_estimate)}_`, '');
   }
   lines.push('## Потребители (оценка входа)', '');
   lines.push('_UTF-8 байт / 3 по аргументам и результатам инструментов за ход. Не биллинг._', '');
@@ -678,6 +876,9 @@ function renderMarkdown(report) {
   lines.push(
     `| Категория | ≈ токены |`,
     `|---|---:|`,
+    `| Инструкции | ${formatNum(cats.instructions || 0)} |`,
+    `| История / запрос | ${formatNum(cats.conversation || 0)} |`,
+    `| Схемы инструментов | ${formatNum(cats.schemas || 0)} |`,
     `| Результаты инструментов | ${formatNum(cats.tool_results || 0)} |`,
     `| Вызовы инструментов | ${formatNum(cats.tool_calls || 0)} |`,
     ''
@@ -705,10 +906,18 @@ module.exports = {
   writeJson,
   appendJsonl,
   measuredFromPayload,
+  emptyCategories,
+  mergeCategories,
   emptyPending,
   liveReportFromPending,
   promptPreview,
   extractPromptText,
+  estimateInstructions,
+  estimateSchemas,
+  estimateConversationContext,
+  pushRequest,
+  buildChatSummary,
+  buildExportSnapshot,
   add,
   rank,
   saveTurn,
@@ -736,4 +945,5 @@ module.exports = {
   readSessionPrompt,
   writeSessionPrompt,
   clearSessionPending,
+  CATEGORY_KEYS,
 };

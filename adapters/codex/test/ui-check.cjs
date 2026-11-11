@@ -35,7 +35,7 @@ fixture.accountLimits = { state: 'ready', stale: false, fetchedAt: '2026-11-11T1
       }, { html: fs.readFileSync('dist/panel.html', 'utf8'), fixture, theme });
       const frame = page.frameLocator('iframe');
       await frame.locator('#total').filter({ hasText: '12 900' }).waitFor({ timeout: 10000 });
-      assert.equal(await frame.locator('select').count(), 0);
+      assert.equal(await frame.locator('#answer-page select').count(), 0);
       assert.equal(await frame.locator('#answer-title img, #prompt-preview img').count(), 0);
       assert.equal(await frame.locator('#browser-report').count(), 0);
       assert.equal((await frame.locator('#share-button').textContent()).trim(), '');
@@ -62,7 +62,7 @@ fixture.accountLimits = { state: 'ready', stale: false, fetchedAt: '2026-11-11T1
       await frame.locator('#download-html').press('End');
       await frame.locator('#download-json').press('Tab');
       assert.equal(await frame.locator('#share-menu').isVisible(), false);
-      assert.equal(await frame.locator('.prompt > summary').evaluate(el => el === document.activeElement), true);
+      assert.equal(await frame.locator('#page-report').evaluate(el => el === document.activeElement), true);
       await frame.locator('#share-button').click(); await frame.locator('h1').click();
       assert.equal(await frame.locator('#share-menu').isVisible(), false);
       await frame.locator('#share-button').click(); await frame.locator('#download-html').press('ArrowDown'); await frame.locator('#download-json').press(' ');

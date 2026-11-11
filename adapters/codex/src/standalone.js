@@ -1,5 +1,11 @@
 import { createReportView } from './view.js';
-const { report, baseUrl } = JSON.parse(document.getElementById('report-data').textContent);
+import { createLibrary } from './library.js';
+const { report, baseUrl, page = 'report' } = JSON.parse(document.getElementById('report-data').textContent);
+async function request(endpoint, body) {
+  const response = await fetch(baseUrl + endpoint, { cache: 'no-store', ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
 const view = createReportView({
   live: !!baseUrl,
   getReport: async binding => {
@@ -9,4 +15,7 @@ const view = createReportView({
     return { report: await response.json(), baseUrl };
   }
 });
-view.bind({ sessionId: report.sessionId, turnId: report.turnId });
+if (baseUrl) {
+  const library = createLibrary({ view, list: args => request('/api/reports?' + new URLSearchParams(args)), readSettings: () => request('/api/settings'), saveSettings: args => request('/api/settings', args), remove: reports => request('/api/reports/delete', { reports }) });
+  if (report) library.open({ sessionId: report.sessionId, turnId: report.turnId }); else library.show(page);
+} else view.bind({ sessionId: report.sessionId, turnId: report.turnId });

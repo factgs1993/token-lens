@@ -29,3 +29,44 @@ test('prompt preview normalizes whitespace and limits stored text', () => {
   assert.deepEqual(lib.promptPreview('abcdef', 3), { preview: 'abc…', length: 6 });
   assert.equal(lib.promptPreview('a'.repeat(201)).preview.length, 201);
 });
+
+test('reasoning stays null unless stop payload provides it', () => {
+  const plain = lib.measuredFromPayload({ input_tokens: 10, output_tokens: 2 });
+  assert.equal(plain.reasoning_tokens, null);
+  const withReasoning = lib.measuredFromPayload({
+    input_tokens: 10,
+    output_tokens: 2,
+    reasoning_tokens: 7,
+  });
+  assert.equal(withReasoning.reasoning_tokens, 7);
+  const alias = lib.measuredFromPayload({
+    input_tokens: 10,
+    output_tokens: 2,
+    reasoning_output_tokens: 4,
+  });
+  assert.equal(alias.reasoning_tokens, 4);
+});
+
+test('mergeTurnReports keeps five category keys and request history', () => {
+  const merged = lib.mergeTurnReports(
+    {
+      categories: { instructions: 100, conversation: 20, schemas: 5, tool_calls: 9, tool_results: 2 },
+      requests: [{ kind: 'assistant' }],
+      reasoning_estimate: 11,
+      consumers: [{ name: 'Shell', tokens: 2 }],
+    },
+    {
+      categories: { instructions: 0, conversation: 40, schemas: 0, tool_calls: 0, tool_results: 0 },
+      requests: [],
+      reasoning_estimate: 3,
+      consumers: [],
+      measured: { input_tokens: 1, output_tokens: 1, total_tokens: 2, reasoning_tokens: null },
+    }
+  );
+  assert.equal(merged.categories.instructions, 100);
+  assert.equal(merged.categories.conversation, 40);
+  assert.equal(merged.categories.tool_calls, 9);
+  assert.equal(merged.requests.length, 1);
+  assert.equal(merged.reasoning_estimate, 11);
+  assert.equal(merged.consumers[0].name, 'Shell');
+});

@@ -16,10 +16,13 @@ const {
   measuredFromPayload,
   saveTurn,
   loadChat,
+  findTurn,
   writeSessionPending,
   readSessionPending,
   emptyPending,
+  emptyCategories,
   mergeTurnReports,
+  buildExportSnapshot,
   writeJson,
   deleteAnswerReports,
   listAnswerReports,
@@ -300,5 +303,52 @@ function testAnswerMarkdownFlags() {
 }
 
 testAnswerMarkdownFlags();
+
+function testExportSnapshotWithHistory() {
+  const chatId = 'chat-export-1';
+  saveTurn({
+    at: '2026-01-01T00:00:00.000Z',
+    conversation_id: chatId,
+    generation_id: 'gen-a',
+    prompt_preview: 'first',
+    measured: { input_tokens: 10, output_tokens: 2, total_tokens: 12, incomplete: false, reasoning_tokens: null },
+    categories: emptyCategories(),
+    consumers: [],
+    requests: [{ kind: 'stop_total', input_tokens: 10, output_tokens: 2 }],
+  });
+  saveTurn({
+    at: '2026-01-01T00:01:00.000Z',
+    conversation_id: chatId,
+    generation_id: 'gen-b',
+    prompt_preview: 'second',
+    measured: null,
+    categories: { ...emptyCategories(), instructions: 12 },
+    consumers: [],
+    requests: [],
+  });
+  const selected = findTurn(chatId, 'gen-a');
+  const snap = buildExportSnapshot(selected, { offline: true });
+  assert.equal(snap.schemaVersion, 1);
+  assert.equal(snap.turns.length, 2);
+  assert.equal(snap.summary.measuredTurnCount, 1);
+  assert.equal(snap.summary.missingUsageTurns, 1);
+  assert.equal(snap.selected.generation_id, 'gen-a');
+  assert.equal(snap.offline, true);
+  assert.ok(snap.exportedAt);
+}
+
+testExportSnapshotWithHistory();
+
+function testReasoningAndEmptyPendingCategories() {
+  const pending = emptyPending('chat-cats');
+  assert.equal(pending.categories.instructions, 0);
+  assert.equal(pending.categories.schemas, 0);
+  assert.deepEqual(pending.requests, []);
+  const measured = measuredFromPayload({ input_tokens: 5, output_tokens: 1, reasoning_tokens: 9 });
+  assert.equal(measured.reasoning_tokens, 9);
+  assert.equal(measuredFromPayload({ input_tokens: 5, output_tokens: 1 }).reasoning_tokens, null);
+}
+
+testReasoningAndEmptyPendingCategories();
 
 console.log(JSON.stringify({ ok: true, tmp, chats: CHATS_DIR }));

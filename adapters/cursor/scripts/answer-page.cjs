@@ -8,13 +8,16 @@ const {
   formatNum,
   writeJson,
   readSettings,
+  loadChat,
+  buildChatSummary,
+  buildExportSnapshot,
+  emptyCategories,
 } = require('./lib.cjs');
 const { ensureServerSync, answerUrl } = require('./serve.cjs');
 const { fetchPlanUsageSync, renderPlanBars, formatPlanUsageLine } = require('./plan-usage.cjs');
 
 function buildAnswerMarkdown(url, report) {
   const settings = readSettings();
-  // Separate markdown paragraphs: Cursor/chat collapses single \n into one line.
   const blocks = [`[📊 Аналитика запроса/ответа](${url})`];
   if (settings.appendPlanLimits) {
     blocks.push(formatPlanUsageLine(report && report.plan_usage));
@@ -37,11 +40,105 @@ function answerKey(report) {
   return String(raw).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || `turn-${Date.now()}`;
 }
 
-function renderAnswerHtml(report) {
+const CATEGORY_ROWS = [
+  ['schemas', 'Схемы инструментов', '#ab9af5'],
+  ['tool_results', 'Результаты инструментов', '#68bdea'],
+  ['instructions', 'Инструкции и правила', '#e2bd68'],
+  ['conversation', 'История, запрос и контекст', '#79c9aa'],
+  ['tool_calls', 'Аргументы вызовов инструментов', '#e4a17d'],
+];
+
+function renderCategoryBars(cats) {
+  const values = CATEGORY_ROWS.map(([key, label, color]) => ({
+    key,
+    label,
+    color,
+    value: Number(cats[key]) || 0,
+  }));
+  const total = values.reduce((sum, row) => sum + row.value, 0) || 1;
+  const bars = values
+    .filter((row) => row.value > 0)
+    .map(
+      (row) =>
+        `<div class="row"><i style="background:${row.color}"></i><span>${escapeHtml(row.label)}</span><strong>≈ ${escapeHtml(formatNum(row.value))}</strong><div class="track"><span style="width:${Math.min(100, (row.value / total) * 100)}%;background:${row.color}"></span></div></div>`
+    )
+    .join('');
+  const stack = values
+    .filter((row) => row.value > 0)
+    .map((row) => `<span style="flex-grow:${row.value};background:${row.color}"></span>`)
+    .join('');
+  return {
+    bars: bars || '<p class="muted">Нет категорий.</p>',
+    stack: stack ? `<div class="stack" aria-hidden="true">${stack}</div>` : '',
+  };
+}
+
+function renderRequestsTable(requests) {
+  const rows = Array.isArray(requests) ? requests : [];
+  if (!rows.length) return '<p class="muted">Шагов пока нет. Cursor отдаёт measured totals только в stop.</p>';
+  const body = rows
+    .map((step, index) => {
+      const label = `${index + 1} · ${escapeHtml(step.model || '—')}<br><small class="muted">${escapeHtml(step.kind || 'step')}${step.at ? ` · ${escapeHtml(new Date(step.at).toLocaleTimeString('ru-RU'))}` : ''}</small>`;
+      const cell = (value) => `<td class="num">${escapeHtml(value == null ? '—' : formatNum(value))}</td>`;
+      return `<tr><td>${label}</td>${cell(step.input_tokens)}${cell(step.cache_read_tokens)}${cell(step.output_tokens)}${cell(step.reasoning_tokens)}</tr>`;
+    })
+    .join('');
+  return `<div class="table-wrap"><table><thead><tr><th>Шаг / модель</th><th class="num">Вход</th><th class="num">Кэш¹</th><th class="num">Выход</th><th class="num">Рассуждения</th></tr></thead><tbody>${body}</tbody></table></div><p class="muted">¹ Кэш уже входит во вход, если Cursor его передал. Токены у промежуточных шагов недоступны — только у строки stop_total.</p>`;
+}
+
+function renderChatHistory(report, { offline = false, snapshot = null } = {}) {
+  const chat = !offline ? loadChat(report.conversation_id) : null;
+  const turns =
+    offline && snapshot && Array.isArray(snapshot.turns)
+      ? snapshot.turns
+      : chat && Array.isArray(chat.turns)
+        ? chat.turns
+        : report
+          ? [report]
+          : [];
+  const summary = (offline && snapshot && snapshot.summary) || buildChatSummary({ turns });
+  const selected = String(report.generation_id || '');
+  const buttons = turns
+    .map((turn, index) => {
+      const id = String(turn.generation_id || '');
+      const current = id && id === selected;
+      const total = turn.measured ? formatNum(turn.measured.total_tokens) : 'Нет счётчиков';
+      const label = turn.prompt_preview || turn.generation_id || `ход ${index + 1}`;
+      const href =
+        !offline && turn.generation_id
+          ? `/answers/${encodeURIComponent(String(turn.generation_id).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80))}.html`
+          : '#';
+      const tag = offline ? 'div' : 'a';
+      const hrefAttr = offline ? '' : ` href="${escapeHtml(href)}"`;
+      return `<${tag} class="turn${current ? ' current' : ''}"${hrefAttr}><span>${index + 1}. ${escapeHtml(String(label).slice(0, 90))}</span><strong>${escapeHtml(total)}</strong><small>${escapeHtml(turn.status || '—')}${turn.at ? ` · ${escapeHtml(new Date(turn.at).toLocaleString('ru-RU'))}` : ''}</small></${tag}>`;
+    })
+    .join('');
+  return `<details class="history"><summary>История ходов и итоги чата</summary>
+    <section class="metrics" aria-label="Итоги чата">
+      <article class="metric primary"><span>Всего по чату</span><strong>${escapeHtml(formatNum(summary.totals.total_tokens))}</strong><small>по записанным счётчикам</small></article>
+      <article class="metric"><span>Вход</span><strong>${escapeHtml(formatNum(summary.totals.input_tokens))}</strong><small>кэш входит во вход</small></article>
+      <article class="metric"><span>Выход</span><strong>${escapeHtml(formatNum(summary.totals.output_tokens))}</strong><small>рассуждения входят в выход, если измеряются</small></article>
+    </section>
+    <p class="muted">Счётчики есть для ${escapeHtml(String(summary.measuredTurnCount))} из ${escapeHtml(String(summary.turnCount))} ходов. Без счётчиков: ${escapeHtml(String(summary.missingUsageTurns))}. Выполняются: ${escapeHtml(String(summary.runningTurns))}.</p>
+    <div class="turns">${buttons || '<p class="muted">Нет сохранённых ходов.</p>'}</div>
+  </details>`;
+}
+
+function reasoningLabel(report, m) {
+  if (m && m.reasoning_tokens != null) {
+    return `${escapeHtml(formatNum(m.reasoning_tokens))} рассуждений · measured · входит в выход`;
+  }
+  if (report.reasoning_estimate) {
+    return `≈ ${escapeHtml(formatNum(report.reasoning_estimate))} оценка thinking (UTF-8/3) · не billable`;
+  }
+  return 'нет данных · Cursor hooks обычно не отдают reasoning';
+}
+
+function renderAnswerHtml(report, { offline = false, snapshot = null } = {}) {
   const key = answerKey(report);
   const m = report.measured || {};
   const consumers = report.consumers || [];
-  const cats = report.categories || {};
+  const cats = { ...emptyCategories(), ...(report.categories || {}) };
   const consumerRows = consumers.length
     ? consumers
         .map(
@@ -50,18 +147,9 @@ function renderAnswerHtml(report) {
         )
         .join('')
     : '<p class="muted">Нет оценки по инструментам.</p>';
-
-  const catTotal = (cats.tool_results || 0) + (cats.tool_calls || 0) || 1;
-  const catBars = [
-    ['Результаты инструментов', cats.tool_results || 0, '#68bdea'],
-    ['Вызовы инструментов', cats.tool_calls || 0, '#e4a17d'],
-  ]
-    .filter(([, value]) => value > 0)
-    .map(
-      ([label, value, color]) =>
-        `<div class="row"><i style="background:${color}"></i><span>${escapeHtml(label)}</span><strong>≈ ${escapeHtml(formatNum(value))}</strong><div class="track"><span style="width:${Math.min(100, (value / catTotal) * 100)}%;background:${color}"></span></div></div>`
-    )
-    .join('');
+  const { bars: catBars, stack: catStack } = renderCategoryBars(cats);
+  const exportPayload = snapshot || buildExportSnapshot(report, { offline: true });
+  const liveBadge = offline ? 'Сохранённый отчёт' : 'Обновляется';
 
   return `<!doctype html>
 <html lang="ru">
@@ -72,7 +160,7 @@ function renderAnswerHtml(report) {
   <style>
     :root { color-scheme: light dark; --fg:#e8eaed; --muted:#9aa0a6; --card:#1e1f24; --line:#2d3038; --bg:#121317; --accent:#7dd3fc; }
     body { margin:0; font:14px/1.45 system-ui,sans-serif; color:var(--fg); background:var(--bg); }
-    main { max-width:720px; margin:0 auto; padding:20px 16px 40px; }
+    main { max-width:760px; margin:0 auto; padding:20px 16px 40px; }
     .eyebrow { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
     h1 { font-size:22px; margin:6px 0 8px; }
     .muted { color:var(--muted); }
@@ -87,11 +175,12 @@ function renderAnswerHtml(report) {
     .row i { width:8px; height:8px; border-radius:99px; background:var(--accent); }
     .track { grid-column:2 / -1; height:4px; background:var(--line); border-radius:99px; overflow:hidden; }
     .track span { display:block; height:100%; }
+    .stack { display:flex; height:10px; border-radius:99px; overflow:hidden; background:var(--line); margin:10px 0; }
+    .stack span { min-width:2px; }
     details { margin-top:12px; color:var(--muted); }
-    details.prompt { margin:10px 0 16px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
-    details.prompt summary { cursor:pointer; color:var(--fg); font-weight:600; }
+    details.prompt, details.history, details.share, details.plan { margin:10px 0 16px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
+    details.prompt summary, details.history summary, details.share summary { cursor:pointer; color:var(--fg); font-weight:600; }
     details.prompt pre { white-space:pre-wrap; margin:8px 0 4px; color:var(--muted); font:12px/1.45 ui-monospace,Consolas,monospace; }
-    details.plan { margin:14px 0 18px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; color:var(--fg); }
     details.plan > summary { cursor:pointer; list-style:none; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:baseline; }
     details.plan > summary::-webkit-details-marker { display:none; }
     details.plan .plan-caret { display:inline-block; width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:7px solid var(--muted); transform:translateY(1px); flex:0 0 auto; transition:transform .12s ease; }
@@ -109,50 +198,109 @@ function renderAnswerHtml(report) {
     .plan-sub { font-size:11px; margin-top:4px; }
     .plan-lk { margin:12px 0 0; font-size:12px; color:var(--muted); }
     .plan-lk a { color:var(--accent); }
-    .nav { margin:0 0 14px; }
+    .nav { margin:0 0 14px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
     .nav a { color:var(--accent); text-decoration:none; }
     .nav a:hover { text-decoration:underline; }
+    .live { font-size:12px; color:var(--muted); }
+    .share a, .share button { display:block; width:100%; text-align:left; padding:8px 0; color:var(--accent); background:transparent; border:0; font:inherit; cursor:pointer; }
+    .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:12px; background:var(--card); }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+    tr:last-child td { border-bottom:0; }
+    .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .turns { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+    a.turn { display:grid; grid-template-columns:1fr auto; gap:2px 10px; text-decoration:none; color:inherit; border:1px solid var(--line); border-radius:10px; padding:10px; background:var(--bg); }
+    a.turn.current { border-color:color-mix(in srgb,var(--accent) 45%, var(--line)); }
+    a.turn span { grid-column:1; color:var(--fg); }
+    a.turn strong { grid-column:2; grid-row:1 / span 2; align-self:center; }
+    a.turn small { grid-column:1; color:var(--muted); }
+    .header-row { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; }
   </style>
 </head>
 <body>
   <main>
-    <p class="nav"><a href="/">All Reports</a> · <a href="/settings?from=${encodeURIComponent(key)}">Settings</a></p>
-    <div class="eyebrow">Cursor · локальная статистика · per answer</div>
-    <h1>📊 Аналитика запроса/ответа</h1>
+    <div class="nav">
+      ${offline ? '<span class="muted">Автономный снимок · без сервера</span>' : `<span><a href="/">All Reports</a> · <a href="/settings?from=${encodeURIComponent(key)}">Settings</a></span>`}
+      <span class="live" id="live">${escapeHtml(liveBadge)}</span>
+    </div>
+    <div class="header-row">
+      <div>
+        <div class="eyebrow">Cursor · локальная статистика · per answer</div>
+        <h1>📊 Аналитика запроса/ответа</h1>
+      </div>
+    </div>
+    <details class="share"><summary>Поделиться</summary>
+      ${offline ? '' : `<a href="/export.html?key=${encodeURIComponent(key)}" download>Скачать как HTML</a><a href="/export.json?key=${encodeURIComponent(key)}" download>Скачать как JSON</a>`}
+      <button id="offline-json" type="button">Скачать как JSON${offline ? '' : ' (локальная копия)'}</button>
+    </details>
     <p class="muted">Чат <code>${escapeHtml(report.conversation_id || '—')}</code>
       · ход <code>${escapeHtml(report.generation_id || '—')}</code>
       · модель <code>${escapeHtml(report.model || '—')}</code>
       · ${escapeHtml(report.status || 'completed')}
-      · ${escapeHtml(report.at || '')}</p>
+      · ${escapeHtml(report.at || '')}
+      ${report.context_tokens != null ? ` · context ≈ ${escapeHtml(formatNum(report.context_tokens))}` : ''}</p>
 
     <details class="prompt">
       <summary>Запрос${report.prompt_length ? ` · ${escapeHtml(String(report.prompt_length))} символов` : ''} <span class="badge">первые 200</span></summary>
       <pre>${escapeHtml(report.prompt_preview || 'Текст запроса для этого хода не попал в stop (хук beforeSubmitPrompt не сработал или preview сбросили до записи страницы).')}</pre>
     </details>
 
-    ${renderPlanBars(report.plan_usage)}
+    ${offline ? '' : renderPlanBars(report.plan_usage)}
+    ${renderChatHistory(report, { offline, snapshot: exportPayload })}
 
     <div class="eyebrow">Фактические счётчики (stop)${m.incomplete ? ' · неполный отчёт' : ''}</div>
     <section class="metrics" aria-label="Фактический расход">
-      <article class="metric primary"><span>Всего</span><strong>${escapeHtml(m.incomplete ? 'неполный' : formatNum(m.total_tokens))}</strong><small>${m.incomplete ? 'нет полного входа+выхода' : 'вход + выход'}</small></article>
-      <article class="metric"><span>Вход</span><strong>${escapeHtml(formatNum(m.input_tokens))}</strong><small>без кэша ${escapeHtml(formatNum(m.uncached_input_tokens))}</small></article>
-      <article class="metric"><span>Cache read</span><strong>${escapeHtml(formatNum(m.cache_read_tokens))}</strong><small>входит во вход</small></article>
-      <article class="metric"><span>Выход</span><strong>${escapeHtml(formatNum(m.output_tokens))}</strong><small>${m.output_tokens == null ? 'нет данных' : 'completion'}</small></article>
+      <article class="metric primary"><span>Всего</span><strong id="total">${escapeHtml(report.measured == null ? 'нет данных' : m.incomplete ? 'неполный' : formatNum(m.total_tokens))}</strong><small>${report.measured == null ? 'stop без token fields' : 'вход + выход'}</small></article>
+      <article class="metric"><span>Вход</span><strong id="input">${escapeHtml(formatNum(m.input_tokens))}</strong><small id="cached">cache read ${escapeHtml(formatNum(m.cache_read_tokens))} · входит во вход</small></article>
+      <article class="metric"><span>Выход</span><strong id="output">${escapeHtml(formatNum(m.output_tokens))}</strong><small id="reasoning">${reasoningLabel(report, m)}</small></article>
+      <article class="metric"><span>Cache write</span><strong>${escapeHtml(formatNum(m.cache_write_tokens))}</strong><small>без кэша ${escapeHtml(formatNum(m.uncached_input_tokens))}</small></article>
     </section>
 
     <h2>Что занимало вход <span class="badge">оценка</span></h2>
-    <p class="muted">UTF-8 байт / 3 по видимым tool args/results. Не биллинг и не полное разложение входа.</p>
-    ${catBars || '<p class="muted">Нет категорий.</p>'}
+    <p class="muted">UTF-8 байт / 3 по инструкциям, истории, схемам и tool I/O. Не биллинг и не полное разложение measured входа.</p>
+    ${catStack}
+    ${catBars}
 
     <h2>Потребители: результаты инструментов <span class="badge">оценка</span></h2>
     ${consumerRows}
 
+    <h2>Запросы модели <span class="badge">${escapeHtml(String((report.requests || []).length))} шагов</span></h2>
+    ${renderRequestsTable(report.requests)}
+
     <details>
       <summary>Источник</summary>
-      <p>Measured totals из Cursor <code>stop</code> hook. Потребители — локальная оценка tool I/O.
-      Инструкции, история и схемы инструментов в эту версию ещё не входят. Subagent spend не включён.</p>
+      <p>Measured totals из Cursor <code>stop</code>. Шаги — границы afterAgentResponse / tool_batch; токены только у stop_total.
+      Категории — локальная оценка. Reasoning measured — только если Cursor передал поле; иначе оценка thinking из afterAgentThought.
+      Схемы — оценка каталога builtin + mcp.json, не точный wire payload. Subagent spend не включён.</p>
     </details>
   </main>
+  <script type="application/json" id="answer-data">${JSON.stringify(report).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')}</script>
+  <script type="application/json" id="export-data">${JSON.stringify(exportPayload).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')}</script>
+  <script>
+  (function () {
+    var report = JSON.parse(document.getElementById('answer-data').textContent);
+    var snapshot = JSON.parse(document.getElementById('export-data').textContent);
+    var offline = ${offline ? 'true' : 'false'};
+    var key = ${JSON.stringify(key)};
+    var button = document.getElementById('offline-json');
+    if (button) button.onclick = function () {
+      var url = URL.createObjectURL(new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' }));
+      var a = document.createElement('a'); a.href = url; a.download = 'token-lens-' + key + '.json'; a.click();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    };
+    if (!offline) setInterval(async function () {
+      if (document.hidden) return;
+      try {
+        var response = await fetch('/api/answer?key=' + encodeURIComponent(key), { cache: 'no-store' });
+        if (response.status === 410) { location.reload(); return; }
+        if (!response.ok) return;
+        var next = await response.json();
+        if (JSON.stringify(next) !== JSON.stringify(report)) location.reload();
+      } catch (e) { /* keep last known report */ }
+    }, 4000);
+  })();
+  </script>
 </body>
 </html>`;
 }
@@ -163,7 +311,6 @@ function writeAnswerPage(report) {
   const key = answerKey(report);
   const htmlPath = path.join(ANSWERS_DIR, `${key}.html`);
   const jsonPath = path.join(ANSWERS_DIR, `${key}.json`);
-  // Never downgrade a completed answer to an empty in-progress rewrite.
   if (fs.existsSync(jsonPath)) {
     try {
       const prev = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
@@ -189,7 +336,13 @@ function writeAnswerPage(report) {
           ) {
             report = { ...report, consumers: prev.consumers };
           }
-          // Never copy measured onto a live in_progress rewrite (can be a previous turn's totals).
+          if (
+            (!report.requests || (Array.isArray(report.requests) && !report.requests.length)) &&
+            Array.isArray(prev.requests) &&
+            prev.requests.length
+          ) {
+            report = { ...report, requests: prev.requests };
+          }
           if (!report.measured && prev.measured && report.status !== 'in_progress') {
             report = { ...report, measured: prev.measured };
           }
@@ -208,7 +361,6 @@ function writeAnswerPage(report) {
   }
   fs.writeFileSync(htmlPath, renderAnswerHtml(report));
   writeJson(jsonPath, report);
-  // Cursor opens file:// as source in the editor — serve over localhost for real UI.
   const server = ensureServerSync();
   const url = answerUrl(key);
   const markdown = buildAnswerMarkdown(url, report);
@@ -243,6 +395,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  renderAnswerHtml,
   ANSWERS_DIR,
   writeAnswerPage,
   responseLinkFromLatest,
