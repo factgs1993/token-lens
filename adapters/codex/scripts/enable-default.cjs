@@ -1,8 +1,10 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { ensureConfig, configPath } = require('../dist/config.cjs');
 
 const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+const config = ensureConfig(codexHome);
 const helper = path.join(codexHome, 'tools', 'token-usage-link.cjs');
 const instructions = path.join(codexHome, 'AGENTS.md');
 const start = '<!-- codex-token-lens-default:start -->';
@@ -17,6 +19,8 @@ Immediately before each final answer, run this local helper once using the shell
     node "${helper}"
 
 Append the returned \`markdown\` value unchanged on the last line of the final answer. It is labelled “📊 Токены этого ответа” and binds the current chat and turn. Do not reuse a link from an earlier answer, invent IDs, require a plugin mention, or open the report automatically. The helper uses CODEX_THREAD_ID; the report opens locally without a model request. If the helper fails, state the specific failure briefly instead of fabricating counts or a link.
+
+The helper chooses one destination from token-lens/config.json (reportView: mcp or browser). Append exactly that one link; do not add a second HTML link.
 ${end}`;
 
 let current = fs.existsSync(instructions) ? fs.readFileSync(instructions, 'utf8') : '';
@@ -32,4 +36,4 @@ fs.mkdirSync(runtime, { recursive: true });
 for (const file of ['link.cjs', 'report.cjs', 'standalone.html']) fs.copyFileSync(path.join(__dirname, '../dist', file), path.join(runtime, file));
 fs.writeFileSync(helper, "require('./token-lens/link.cjs').main();\n");
 fs.writeFileSync(instructions, current);
-console.log(JSON.stringify({ instructions, helper, enabled: true }));
+console.log(JSON.stringify({ instructions, helper, configPath: configPath(codexHome), reportView: config.reportView, enabled: true }));
