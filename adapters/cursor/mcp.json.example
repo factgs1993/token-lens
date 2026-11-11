@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "cursor-token-lens": {
+      "command": "node",
+      "args": ["${CURSOR_PLUGIN_ROOT}/mcp/server.cjs"],
+      "env": {}
+    }
+  }
+}
