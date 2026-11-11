@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Аналитика запроса/ответа</title>
+  <style>
+    :root { color-scheme: light dark; --fg: #e8eaed; --muted: #9aa0a6; --card: #1e1f24; --line: #2d3038; --accent: #7dd3fc; }
+    body { margin: 0; font: 13px/1.45 system-ui, sans-serif; color: var(--fg); background: #121317; }
+    main { padding: 14px 16px 20px; }
+    .eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    h1 { font-size: 18px; margin: 4px 0 12px; }
+    .metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+    .metric { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+    .metric span, .metric small { display: block; color: var(--muted); font-size: 11px; }
+    .metric strong { display: block; font-size: 20px; margin: 4px 0; }
+    .metric.primary { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+    h2 { font-size: 13px; margin: 16px 0 8px; }
+    .row { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; margin: 6px 0; }
+    .row i { width: 8px; height: 8px; border-radius: 99px; background: var(--accent); }
+    .muted { color: var(--muted); }
+    pre { white-space: pre-wrap; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Cursor · локальная статистика</div>
+    <h1>📊 Аналитика запроса/ответа</h1>
+    <p id="status" class="muted">Загрузка…</p>
+    <div id="metrics" class="metrics" hidden></div>
+    <h2>Потребители</h2>
+    <div id="consumers"></div>
+    <h2>Markdown</h2>
+    <pre id="md"></pre>
+  </main>
+  <script>
+    const data = __TOKEN_LENS_DATA__;
+    const fmt = (n) => Number.isFinite(n) ? Math.round(n).toLocaleString('ru-RU') : '—';
+    const status = document.getElementById('status');
+    const metrics = document.getElementById('metrics');
+    const consumers = document.getElementById('consumers');
+    const md = document.getElementById('md');
+    try {
+      status.textContent = data.live
+        ? 'Ход ещё идёт · фактические счётчики появятся после stop'
+        : `Чат ${data.conversation_id || '—'}`;
+      md.textContent = data.markdown || '';
+      if (data.measured) {
+        metrics.hidden = false;
+        metrics.innerHTML = [
+          ['Всего', data.measured.total_tokens, 'ход'],
+          ['Вход', data.measured.input_tokens, 'включая cache'],
+          ['Без кэша', data.measured.uncached_input_tokens, 'input − cache'],
+          ['Выход', data.measured.output_tokens, 'completion']
+        ].map(([label, value, hint], i) =>
+          `<article class="metric${i === 0 ? ' primary' : ''}"><span>${label}</span><strong>${fmt(value)}</strong><small>${hint}</small></article>`
+        ).join('');
+      }
+      const rows = Array.isArray(data.consumers) ? data.consumers : [];
+      consumers.innerHTML = rows.length
+        ? rows.map(row => `<div class="row"><i></i><span>${row.name}</span><strong>≈ ${fmt(row.tokens)}</strong></div>`).join('')
+        : '<p class="muted">Нет оценки по инструментам.</p>';
+    } catch (error) {
+      status.textContent = String(error && error.message ? error.message : error);
+    }
+  </script>
+</body>
+</html>
