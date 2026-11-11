@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "codex-token-lens",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Local Codex token usage by answer, with measured totals and estimated context consumers.",
   "extensions": {
     "com.openai": {

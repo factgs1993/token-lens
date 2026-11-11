@@ -15,6 +15,6 @@ Both views include a bounded prompt preview, turn history, and measured chat tot
 
 The account limits section uses Codex App Server rate-limit snapshots: remaining percentages, window lengths and reset times. These apply to the whole account, not to the selected answer. A fixed count of remaining requests is not provided. Do not convert percentages into invented request counts or infer recovery from an elapsed reset time; unavailable and stale limits must stay labelled.
 
-When appendPlanLimits is enabled in Settings, the helper includes a short account-wide limits paragraph before the one link. Preserve the complete returned markdown unchanged. Report deletion and retention affect Token Lens visibility only; Codex session journals are preserved.
+When appendPlanLimits is enabled in Settings, the helper includes an account-wide limits heading and bullet list before the one link. Preserve the complete returned markdown unchanged. Report deletion and retention affect Token Lens visibility only; Codex session journals are preserved.
 
 If this environment has no local Codex journal or cannot open the plugin UI, state that limitation instead of inventing token counts or a functioning link. Token usage records are local counters, not a monetary bill. Cached input is included in input; reasoning is included in output. Consumer estimates must not be presented as exact billing attribution.

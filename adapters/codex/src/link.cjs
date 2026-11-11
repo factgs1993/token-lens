@@ -9,7 +9,7 @@ function formatFooter(limits) {
     const duration = !minutes ? 'окно' : minutes % 1440 === 0 ? `${minutes / 1440} д` : minutes % 60 === 0 ? `${minutes / 60} ч` : `${minutes} мин`;
     return `${pool.name === 'Codex' ? 'Осталось' : `${pool.name}: осталось`} ${window.remainingPercent}% (${duration})`;
   }));
-  return ['Лимиты аккаунта Codex:', ...windows, 'Общие для всех чатов.'].join('  \n');
+  return 'Лимиты аккаунта Codex:\n\n' + [...windows, 'Общие для всех чатов.'].map(line => `* ${line}`).join('\n');
 }
 
 function responseLink(sessionId, turnId) {
