@@ -7,7 +7,7 @@
 ## Что умеет 0.3.0
 
 - Per-answer HTML-отчёт: measured input/output/cache, поле reasoning, потребители, preview запроса, лимиты подписки
-- Таблица шагов модели (границы `afterAgentResponse` / tool batch); **токены только у строки `stop_total`** — Cursor не отдаёт per-request usage в hooks
+- Таблица запросов модели: measured-дельты с `afterAgentResponse` (когда Cursor отдал token fields) + строка `stop_total`; пустые `tool_batch` больше не показываются как запросы
 - Оценка категорий входа: инструкции, история/запрос, схемы инструментов, tool args/results (UTF-8/3, не биллинг)
 - История ходов и итоги чата **в самом HTML-отчёте**
 - **Поделиться** → HTML/JSON со снимком всех ходов чата + выбранный ответ; автономный HTML без сервера
@@ -109,7 +109,7 @@ node scripts/serve.cjs --stop
 
 - `beforeSubmitPrompt` сохраняет превью первых 200 символов запроса и оценку инструкций/схем/истории.
 - `postToolUse` / `afterAgentResponse` / `afterAgentThought` дополняют категории и шаги.
-- Measured totals — из payload `stop`, если Cursor их передал; per-step tokens Cursor IDE hooks не отдают.
+- Measured totals — из `stop` и, при наличии полей, дельты с `afterAgentResponse`. Отдельные вызовы внутри tool-loop без token fields по-прежнему неразличимы.
 - `stop` сохраняет отчёт и HTML **без** автоматического follow-up в чат.
 - Параллельные чаты изолированы по `sessions/<conversation_id>/`; история — до 200 ходов на чат, индекс — 50 чатов.
 - Журналы и HTML — в `~/.cursor/token-lens/`; сервер отдаёт этот каталог по localhost.

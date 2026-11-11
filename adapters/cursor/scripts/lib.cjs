@@ -221,6 +221,76 @@ function measuredFromPayload(payload) {
   };
 }
 
+function emptyUsageCursor() {
+  return {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+    reasoning_tokens: 0,
+  };
+}
+
+function usageDelta(current, previous) {
+  if (!current) return null;
+  const prev = previous && typeof previous === 'object' ? previous : emptyUsageCursor();
+  const field = (key) => {
+    const cur = current[key];
+    if (cur == null) return null;
+    return Math.max(0, Number(cur) - (Number(prev[key]) || 0));
+  };
+  return {
+    input_tokens: field('input_tokens'),
+    output_tokens: field('output_tokens'),
+    cache_read_tokens: field('cache_read_tokens'),
+    cache_write_tokens: field('cache_write_tokens'),
+    reasoning_tokens: field('reasoning_tokens'),
+  };
+}
+
+function advanceUsageCursor(previous, measured) {
+  const prev = previous && typeof previous === 'object' ? previous : emptyUsageCursor();
+  if (!measured) return { ...prev };
+  return {
+    input_tokens: measured.input_tokens != null ? measured.input_tokens : prev.input_tokens,
+    output_tokens: measured.output_tokens != null ? measured.output_tokens : prev.output_tokens,
+    cache_read_tokens: measured.cache_read_tokens != null ? measured.cache_read_tokens : prev.cache_read_tokens,
+    cache_write_tokens: measured.cache_write_tokens != null ? measured.cache_write_tokens : prev.cache_write_tokens,
+    reasoning_tokens: measured.reasoning_tokens != null ? measured.reasoning_tokens : prev.reasoning_tokens,
+  };
+}
+
+function requestHasMeasuredTokens(row) {
+  if (!row || typeof row !== 'object') return false;
+  return (
+    row.input_tokens != null ||
+    row.output_tokens != null ||
+    row.cache_read_tokens != null ||
+    row.cache_write_tokens != null ||
+    row.reasoning_tokens != null
+  );
+}
+
+function visibleModelRequests(requests) {
+  const rows = Array.isArray(requests) ? requests : [];
+  return rows.filter((step) => {
+    if (!step) return false;
+    // tool_batch rows were timeline markers without usage — not model requests
+    if (step.kind === 'tool_batch' && !requestHasMeasuredTokens(step)) return false;
+    return true;
+  });
+}
+
+function summarizeTools(names) {
+  const list = Array.isArray(names) ? names.filter((name) => typeof name === 'string' && name) : [];
+  if (!list.length) return null;
+  const counts = new Map();
+  for (const name of list) counts.set(name, (counts.get(name) || 0) + 1);
+  return [...counts.entries()]
+    .map(([name, count]) => (count > 1 ? `${name}×${count}` : name))
+    .join(', ');
+}
+
 function emptyPending(conversationId) {
   return {
     conversation_id: conversationId || null,
@@ -233,6 +303,8 @@ function emptyPending(conversationId) {
     categories: emptyCategories(),
     tools: [],
     requests: [],
+    batch_tools: [],
+    usage_cursor: emptyUsageCursor(),
     reasoning_estimate: 0,
     context_tokens: null,
   };
@@ -259,7 +331,7 @@ function liveReportFromPending(pending, extras = {}) {
     reasoning_estimate: Number(row.reasoning_estimate) || 0,
     context_tokens: row.context_tokens == null ? null : row.context_tokens,
     estimate_method:
-      'UTF-8 bytes / 3 for instructions/history/schemas/tool I/O; measured totals from stop; Cursor does not expose per-step tokens',
+      'UTF-8 bytes / 3 for instructions/history/schemas/tool I/O; measured request deltas from afterAgentResponse when Cursor sends token fields; stop_total is the turn aggregate',
   };
 }
 
@@ -359,7 +431,7 @@ function estimateConversationContext(conversationId, promptText) {
 
 function pushRequest(pending, row) {
   if (!pending.requests) pending.requests = [];
-  pending.requests.push({
+  const entry = {
     at: row.at || new Date().toISOString(),
     model: row.model || pending.model || null,
     kind: row.kind || 'step',
@@ -368,7 +440,10 @@ function pushRequest(pending, row) {
     cache_read_tokens: row.cache_read_tokens == null ? null : row.cache_read_tokens,
     cache_write_tokens: row.cache_write_tokens == null ? null : row.cache_write_tokens,
     reasoning_tokens: row.reasoning_tokens == null ? null : row.reasoning_tokens,
-  });
+  };
+  if (row.estimated) entry.estimated = true;
+  if (row.tools) entry.tools = String(row.tools).slice(0, 200);
+  pending.requests.push(entry);
 }
 
 function buildChatSummary(chat) {
@@ -908,6 +983,12 @@ module.exports = {
   measuredFromPayload,
   emptyCategories,
   mergeCategories,
+  emptyUsageCursor,
+  usageDelta,
+  advanceUsageCursor,
+  requestHasMeasuredTokens,
+  visibleModelRequests,
+  summarizeTools,
   emptyPending,
   liveReportFromPending,
   promptPreview,

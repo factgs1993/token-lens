@@ -21,6 +21,10 @@ const {
   estimateSchemas,
   estimateConversationContext,
   pushRequest,
+  usageDelta,
+  advanceUsageCursor,
+  visibleModelRequests,
+  summarizeTools,
   add,
   rank,
   saveTurn,
@@ -94,6 +98,16 @@ function hydratePending(conversationId, payload) {
   if (!pending.categories) pending.categories = emptyCategories();
   if (!Array.isArray(pending.requests)) pending.requests = [];
   if (!Array.isArray(pending.tools)) pending.tools = [];
+  if (!Array.isArray(pending.batch_tools)) pending.batch_tools = [];
+  if (!pending.usage_cursor || typeof pending.usage_cursor !== 'object') {
+    pending.usage_cursor = {
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_read_tokens: 0,
+      cache_write_tokens: 0,
+      reasoning_tokens: 0,
+    };
+  }
   if (!pending.consumers || typeof pending.consumers !== 'object' || Array.isArray(pending.consumers)) {
     pending.consumers = {};
   }
@@ -162,11 +176,7 @@ async function main() {
         result_tokens: resultTokens,
         at: new Date().toISOString(),
       });
-      pushRequest(pending, {
-        at: new Date().toISOString(),
-        model: pending.model,
-        kind: 'tool_batch',
-      });
+      pending.batch_tools.push(name);
       writeSessionPending(conversationId, pending);
       if (pending.generation_id) setActive(conversationId, pending.generation_id);
       touchLivePage(pending);
@@ -190,11 +200,24 @@ async function main() {
       const pending = hydratePending(conversationId, payload);
       const text = typeof payload.text === 'string' ? payload.text : '';
       add(pending.categories, 'conversation', estimate(text));
-      pushRequest(pending, {
+      const measured = measuredFromPayload(payload);
+      const tools = summarizeTools(pending.batch_tools);
+      pending.batch_tools = [];
+      const row = {
         at: new Date().toISOString(),
-        model: pending.model,
+        model: payload.model || payload.model_id || pending.model,
         kind: 'assistant',
-      });
+        tools,
+      };
+      if (measured) {
+        const delta = usageDelta(measured, pending.usage_cursor);
+        pending.usage_cursor = advanceUsageCursor(pending.usage_cursor, measured);
+        Object.assign(row, delta);
+      } else if (text) {
+        row.output_tokens = estimate(text);
+        row.estimated = true;
+      }
+      pushRequest(pending, row);
       writeSessionPending(conversationId, pending);
       if (pending.generation_id) setActive(conversationId, pending.generation_id);
       touchLivePage(pending);
@@ -220,12 +243,34 @@ async function main() {
       const chatId = conversationId || pending.conversation_id;
       const prevTurn = findTurn(chatId, generationId);
       const model = payload.model || payload.model_id || pending.model || savedPrompt.model || null;
-      const requests = Array.isArray(pending.requests) ? pending.requests.slice() : [];
+      const requests = visibleModelRequests(pending.requests);
       if (measured) {
+        const orphanTools = summarizeTools(pending.batch_tools);
+        const hasMeasuredAssistant = requests.some(
+          (row) => row && row.kind === 'assistant' && !row.estimated && row.input_tokens != null
+        );
+        if (!hasMeasuredAssistant) {
+          const delta = usageDelta(measured, null);
+          const lastAssistant = [...requests].reverse().find((row) => row && row.kind === 'assistant');
+          if (lastAssistant) {
+            Object.assign(lastAssistant, delta);
+            delete lastAssistant.estimated;
+            if (orphanTools && !lastAssistant.tools) lastAssistant.tools = orphanTools;
+          } else {
+            requests.push({
+              at: new Date().toISOString(),
+              model,
+              kind: 'assistant',
+              tools: orphanTools,
+              ...delta,
+            });
+          }
+        }
         requests.push({
           at: new Date().toISOString(),
           model,
           kind: 'stop_total',
+          tools: hasMeasuredAssistant ? orphanTools : null,
           input_tokens: measured.input_tokens,
           output_tokens: measured.output_tokens,
           cache_read_tokens: measured.cache_read_tokens,
@@ -250,7 +295,7 @@ async function main() {
         reasoning_estimate: Number(pending.reasoning_estimate) || 0,
         context_tokens: pending.context_tokens == null ? null : pending.context_tokens,
         estimate_method:
-          'UTF-8 bytes / 3 for instructions/history/schemas/tool I/O; measured totals from stop; Cursor does not expose per-step tokens',
+          'UTF-8 bytes / 3 for instructions/history/schemas/tool I/O; measured request deltas from afterAgentResponse when present; stop_total is the turn aggregate',
         plan_usage: planUsage,
       });
       writeJson(LATEST_JSON, report);

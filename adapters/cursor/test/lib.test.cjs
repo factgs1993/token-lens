@@ -70,3 +70,31 @@ test('mergeTurnReports keeps five category keys and request history', () => {
   assert.equal(merged.reasoning_estimate, 11);
   assert.equal(merged.consumers[0].name, 'Shell');
 });
+
+test('usage deltas and visible model requests hide empty tool_batch rows', () => {
+  const first = lib.usageDelta(
+    { input_tokens: 100, output_tokens: 10, cache_read_tokens: 40, cache_write_tokens: 0, reasoning_tokens: null },
+    null
+  );
+  assert.equal(first.input_tokens, 100);
+  assert.equal(first.output_tokens, 10);
+  assert.equal(first.cache_read_tokens, 40);
+  const second = lib.usageDelta(
+    { input_tokens: 250, output_tokens: 30, cache_read_tokens: 180, cache_write_tokens: 0, reasoning_tokens: 4 },
+    first
+  );
+  assert.equal(second.input_tokens, 150);
+  assert.equal(second.output_tokens, 20);
+  assert.equal(second.cache_read_tokens, 140);
+  assert.equal(second.reasoning_tokens, 4);
+  assert.equal(lib.summarizeTools(['Read', 'Read', 'Write']), 'Read×2, Write');
+  const visible = lib.visibleModelRequests([
+    { kind: 'tool_batch' },
+    { kind: 'assistant', input_tokens: 10, output_tokens: 2 },
+    { kind: 'tool_batch', input_tokens: 1 },
+    { kind: 'stop_total', input_tokens: 10, output_tokens: 2 },
+  ]);
+  assert.equal(visible.length, 3);
+  assert.equal(visible[0].kind, 'assistant');
+  assert.equal(visible[1].kind, 'tool_batch');
+});

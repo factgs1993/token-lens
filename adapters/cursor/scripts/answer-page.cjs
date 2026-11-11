@@ -12,6 +12,7 @@ const {
   buildChatSummary,
   buildExportSnapshot,
   emptyCategories,
+  visibleModelRequests,
 } = require('./lib.cjs');
 const { ensureServerSync, answerUrl } = require('./serve.cjs');
 const { fetchPlanUsageSync, renderPlanBars, formatPlanUsageLine } = require('./plan-usage.cjs');
@@ -73,17 +74,60 @@ function renderCategoryBars(cats) {
   };
 }
 
-function renderRequestsTable(requests) {
-  const rows = Array.isArray(requests) ? requests : [];
-  if (!rows.length) return '<p class="muted">Шагов пока нет. Cursor отдаёт measured totals только в stop.</p>';
+function requestsForDisplay(report) {
+  const rows = visibleModelRequests(report && report.requests).map((step) => ({ ...step }));
+  const m = report && report.measured;
+  if (!m) return rows;
+  const hasMeasuredAssistant = rows.some(
+    (row) => row.kind === 'assistant' && !row.estimated && row.input_tokens != null
+  );
+  if (!hasMeasuredAssistant) {
+    const delta = {
+      input_tokens: m.input_tokens,
+      output_tokens: m.output_tokens,
+      cache_read_tokens: m.cache_read_tokens,
+      cache_write_tokens: m.cache_write_tokens,
+      reasoning_tokens: m.reasoning_tokens,
+    };
+    const lastAssistant = [...rows].reverse().find((row) => row.kind === 'assistant');
+    if (lastAssistant) {
+      Object.assign(lastAssistant, delta);
+      delete lastAssistant.estimated;
+    } else if (!rows.some((row) => row.kind === 'stop_total')) {
+      rows.push({ kind: 'assistant', model: report.model, ...delta });
+    }
+  }
+  const assistants = rows.filter((row) => row.kind === 'assistant' && row.input_tokens != null && !row.estimated);
+  const stops = rows.filter((row) => row.kind === 'stop_total');
+  if (assistants.length === 1 && stops.length === 1) {
+    const a = assistants[0];
+    const s = stops[0];
+    if (a.input_tokens === s.input_tokens && a.output_tokens === s.output_tokens) {
+      return rows.filter((row) => row.kind !== 'stop_total');
+    }
+  }
+  return rows;
+}
+
+function renderRequestsTable(report) {
+  const rows = requestsForDisplay(report);
+  if (!rows.length) {
+    return '<p class="muted">Запросов модели пока нет. Счётчики появляются из <code>afterAgentResponse</code> / <code>stop</code>, когда Cursor их передал.</p>';
+  }
   const body = rows
     .map((step, index) => {
-      const label = `${index + 1} · ${escapeHtml(step.model || '—')}<br><small class="muted">${escapeHtml(step.kind || 'step')}${step.at ? ` · ${escapeHtml(new Date(step.at).toLocaleTimeString('ru-RU'))}` : ''}</small>`;
-      const cell = (value) => `<td class="num">${escapeHtml(value == null ? '—' : formatNum(value))}</td>`;
+      const tools = step.tools ? ` · ${escapeHtml(step.tools)}` : '';
+      const est = step.estimated ? ' · оценка' : '';
+      const label = `${index + 1} · ${escapeHtml(step.model || '—')}<br><small class="muted">${escapeHtml(step.kind || 'step')}${tools}${est}${step.at ? ` · ${escapeHtml(new Date(step.at).toLocaleTimeString('ru-RU'))}` : ''}</small>`;
+      const cell = (value) => {
+        if (value == null) return '<td class="num">—</td>';
+        const text = step.estimated ? `≈ ${formatNum(value)}` : formatNum(value);
+        return `<td class="num">${escapeHtml(text)}</td>`;
+      };
       return `<tr><td>${label}</td>${cell(step.input_tokens)}${cell(step.cache_read_tokens)}${cell(step.output_tokens)}${cell(step.reasoning_tokens)}</tr>`;
     })
     .join('');
-  return `<div class="table-wrap"><table><thead><tr><th>Шаг / модель</th><th class="num">Вход</th><th class="num">Кэш¹</th><th class="num">Выход</th><th class="num">Рассуждения</th></tr></thead><tbody>${body}</tbody></table></div><p class="muted">¹ Кэш уже входит во вход, если Cursor его передал. Токены у промежуточных шагов недоступны — только у строки stop_total.</p>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Шаг / модель</th><th class="num">Вход</th><th class="num">Кэш¹</th><th class="num">Выход</th><th class="num">Рассуждения</th></tr></thead><tbody>${body}</tbody></table></div><p class="muted">¹ Кэш уже входит во вход, если Cursor его передал. Строки <code>assistant</code> — дельты measured с <code>afterAgentResponse</code> (когда Cursor отдал поля); <code>stop_total</code> — итог хода. Tool I/O в этой таблице не показываем как отдельные запросы.</p>`;
 }
 
 function renderChatHistory(report, { offline = false, snapshot = null } = {}) {
@@ -178,9 +222,16 @@ function renderAnswerHtml(report, { offline = false, snapshot = null } = {}) {
     .stack { display:flex; height:10px; border-radius:99px; overflow:hidden; background:var(--line); margin:10px 0; }
     .stack span { min-width:2px; }
     details { margin-top:12px; color:var(--muted); }
-    details.prompt, details.history, details.share, details.plan { margin:10px 0 16px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
-    details.prompt summary, details.history summary, details.share summary { cursor:pointer; color:var(--fg); font-weight:600; }
+    details.prompt, details.history, details.plan { margin:10px 0 16px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
+    details.prompt summary, details.history summary { cursor:pointer; color:var(--fg); font-weight:600; }
     details.prompt pre { white-space:pre-wrap; margin:8px 0 4px; color:var(--muted); font:12px/1.45 ui-monospace,Consolas,monospace; }
+    details.share { position:relative; margin:0; padding:0; background:transparent; border:0; flex:0 0 auto; color:var(--fg); }
+    details.share > summary { list-style:none; cursor:pointer; width:36px; height:36px; display:grid; place-items:center; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--fg); }
+    details.share > summary::-webkit-details-marker { display:none; }
+    details.share > summary:hover { border-color:color-mix(in srgb,var(--accent) 45%, var(--line)); color:var(--accent); }
+    details.share[open] > summary { border-color:color-mix(in srgb,var(--accent) 45%, var(--line)); color:var(--accent); }
+    details.share > summary svg { width:18px; height:18px; display:block; }
+    .share-menu { position:absolute; right:0; top:calc(100% + 6px); min-width:220px; z-index:5; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:6px 12px; box-shadow:0 10px 28px rgba(0,0,0,.35); }
     details.plan > summary { cursor:pointer; list-style:none; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:baseline; }
     details.plan > summary::-webkit-details-marker { display:none; }
     details.plan .plan-caret { display:inline-block; width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:7px solid var(--muted); transform:translateY(1px); flex:0 0 auto; transition:transform .12s ease; }
@@ -202,7 +253,7 @@ function renderAnswerHtml(report, { offline = false, snapshot = null } = {}) {
     .nav a { color:var(--accent); text-decoration:none; }
     .nav a:hover { text-decoration:underline; }
     .live { font-size:12px; color:var(--muted); }
-    .share a, .share button { display:block; width:100%; text-align:left; padding:8px 0; color:var(--accent); background:transparent; border:0; font:inherit; cursor:pointer; }
+    .share-menu a, .share-menu button { display:block; width:100%; text-align:left; padding:8px 0; color:var(--accent); background:transparent; border:0; font:inherit; cursor:pointer; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:12px; background:var(--card); }
     table { width:100%; border-collapse:collapse; }
     th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
@@ -229,11 +280,16 @@ function renderAnswerHtml(report, { offline = false, snapshot = null } = {}) {
         <div class="eyebrow">Cursor · локальная статистика · per answer</div>
         <h1>📊 Аналитика запроса/ответа</h1>
       </div>
+      <details class="share">
+        <summary aria-label="Поделиться" title="Поделиться">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>
+        </summary>
+        <div class="share-menu">
+          ${offline ? '' : `<a href="/export.html?key=${encodeURIComponent(key)}" download>Скачать как HTML</a><a href="/export.json?key=${encodeURIComponent(key)}" download>Скачать как JSON</a>`}
+          <button id="offline-json" type="button">Скачать как JSON${offline ? '' : ' (локальная копия)'}</button>
+        </div>
+      </details>
     </div>
-    <details class="share"><summary>Поделиться</summary>
-      ${offline ? '' : `<a href="/export.html?key=${encodeURIComponent(key)}" download>Скачать как HTML</a><a href="/export.json?key=${encodeURIComponent(key)}" download>Скачать как JSON</a>`}
-      <button id="offline-json" type="button">Скачать как JSON${offline ? '' : ' (локальная копия)'}</button>
-    </details>
     <p class="muted">Чат <code>${escapeHtml(report.conversation_id || '—')}</code>
       · ход <code>${escapeHtml(report.generation_id || '—')}</code>
       · модель <code>${escapeHtml(report.model || '—')}</code>
@@ -265,13 +321,14 @@ function renderAnswerHtml(report, { offline = false, snapshot = null } = {}) {
     <h2>Потребители: результаты инструментов <span class="badge">оценка</span></h2>
     ${consumerRows}
 
-    <h2>Запросы модели <span class="badge">${escapeHtml(String((report.requests || []).length))} шагов</span></h2>
-    ${renderRequestsTable(report.requests)}
+    <h2>Запросы модели <span class="badge">${escapeHtml(String(requestsForDisplay(report).length))} шагов</span></h2>
+    ${renderRequestsTable(report)}
 
     <details>
       <summary>Источник</summary>
-      <p>Measured totals из Cursor <code>stop</code>. Шаги — границы afterAgentResponse / tool_batch; токены только у stop_total.
-      Категории — локальная оценка. Reasoning measured — только если Cursor передал поле; иначе оценка thinking из afterAgentThought.
+      <p>Measured дельты из <code>afterAgentResponse</code>, когда Cursor передал token fields; <code>stop_total</code> — агрегат хода.
+      Пустые tool_batch больше не считаются запросами модели. Категории — локальная оценка.
+      Reasoning measured — только если Cursor передал поле; иначе оценка thinking из afterAgentThought.
       Схемы — оценка каталога builtin + mcp.json, не точный wire payload. Subagent spend не включён.</p>
     </details>
   </main>
