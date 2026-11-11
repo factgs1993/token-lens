@@ -1,6 +1,6 @@
 {
   "name": "codex-token-lens",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "private": true,
   "description": "Local Codex token usage by answer, with measured totals and estimated context consumers.",
   "type": "module",

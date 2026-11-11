@@ -1,14 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "codex-token-lens",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Local Codex token usage by answer, with measured totals and estimated context consumers.",
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Расход токенов",
-        "shortDescription": "Вход, выход и потребители",
-        "longDescription": "Локальная панель расхода Codex по чатам и ответам. Фактические вход, выход и кэш из журнала; отдельно — оценка видимого контекста и результатов инструментов.",
+        "shortDescription": "Токены, лимиты и экспорт",
+        "longDescription": "Статистика Codex по чатам и ответам: фактические токены, оценка контекста, история, лимиты аккаунта с остатком и сбросами, экспорт HTML/JSON через меню «Поделиться».",
         "category": "Developer Tools",
         "capabilities": [
           "Interactive"
