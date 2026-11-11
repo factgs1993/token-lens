@@ -1,6 +1,16 @@
 {
   "version": 1,
   "hooks": {
+    "workspaceOpen": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/hook.cjs\""
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/hook.cjs\""
+      }
+    ],
     "beforeSubmitPrompt": [
       {
         "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/hook.cjs\""
@@ -13,8 +23,7 @@
     ],
     "stop": [
       {
-        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/hook.cjs\"",
-        "loop_limit": 1
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/hook.cjs\""
       }
     ]
   }
