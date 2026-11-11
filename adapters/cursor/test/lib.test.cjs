@@ -22,3 +22,10 @@ test('consumer ranking and UTF-8 estimates preserve order and bytes', () => {
   assert.equal(lib.estimate('ёж'), 2);
   assert.deepEqual(lib.rank({ shell: 20, read: 50 }, 1), [{ name: 'read', tokens: 50 }]);
 });
+
+test('prompt preview normalizes whitespace and limits stored text', () => {
+  assert.deepEqual(lib.promptPreview(null), { preview: null, length: 0 });
+  assert.deepEqual(lib.promptPreview('  привет\n мир  '), { preview: 'привет мир', length: 10 });
+  assert.deepEqual(lib.promptPreview('abcdef', 3), { preview: 'abc…', length: 6 });
+  assert.equal(lib.promptPreview('a'.repeat(201)).preview.length, 201);
+});
