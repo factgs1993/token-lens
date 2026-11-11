@@ -27,6 +27,9 @@ if (beginAt >= 0) {
   current = current.slice(0, beginAt) + section + current.slice(endAt + end.length);
 } else current = current.trimEnd() + (current.trim() ? '\n\n' : '') + section + '\n';
 fs.mkdirSync(path.dirname(helper), { recursive: true });
-fs.copyFileSync(path.join(__dirname, '../dist/link.cjs'), helper);
+const runtime = path.join(codexHome, 'tools', 'token-lens');
+fs.mkdirSync(runtime, { recursive: true });
+for (const file of ['link.cjs', 'report.cjs', 'standalone.html']) fs.copyFileSync(path.join(__dirname, '../dist', file), path.join(runtime, file));
+fs.writeFileSync(helper, "require('./token-lens/link.cjs').main();\n");
 fs.writeFileSync(instructions, current);
 console.log(JSON.stringify({ instructions, helper, enabled: true }));
