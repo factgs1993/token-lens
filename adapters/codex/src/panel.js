@@ -1,6 +1,6 @@
 import { App, applyDocumentTheme, applyHostStyleVariables } from '@modelcontextprotocol/ext-apps';
 import { createReportView } from './view.js';
-const app = new App({ name: 'codex-token-lens', version: '0.2.0' }, { availableDisplayModes: ['inline', 'fullscreen'] });
+const app = new App({ name: 'codex-token-lens', version: '0.2.1' }, { availableDisplayModes: ['inline', 'fullscreen'] });
 let connected = false;
 const view = createReportView({
   getReport: async binding => {

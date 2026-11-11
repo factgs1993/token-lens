@@ -8,8 +8,8 @@ import browser from './report.cjs';
 
 const store = usage.createStore();
 const resourceUri = 'ui://codex-token-lens/panel.html';
-const server = new McpServer({ name: 'codex-token-lens', version: '0.2.0' }, {
-  instructions: 'When this plugin is active, append a Markdown link labelled “📊 Токены этого ответа” to final answers. Use the bundled answer-link helper from the token-report skill to bind the current Codex session and turn. Do not guess IDs. The link opens statistics without a new model turn. Treat consumer estimates separately from measured counters.'
+const server = new McpServer({ name: 'codex-token-lens', version: '0.2.1' }, {
+  instructions: 'When this plugin is active, append exactly the one Markdown link returned by the bundled answer-link helper, labelled “📊 Токены этого ответа”. Its destination follows reportView in the local token-lens/config.json (mcp or browser). Do not add a second HTML link. Use the token-report skill to bind the current Codex session and turn; do not guess IDs. Opening the report does not start a model turn. Treat consumer estimates separately from measured counters.'
 });
 const annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const result = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data });
