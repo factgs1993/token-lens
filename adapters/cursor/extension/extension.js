@@ -230,6 +230,20 @@ function activate(context) {
     // ignore
   }
 
+  // Autostart local UI server for analytics links.
+  try {
+    const servePath = path.join(os.homedir(), '.cursor', 'plugins', 'local', 'cursor-token-lens', 'scripts', 'serve.cjs');
+    if (fs.existsSync(servePath)) {
+      require('child_process').spawn(process.execPath, [servePath, '--start'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      }).unref();
+    }
+  } catch {
+    // non-fatal
+  }
+
   const controller = new PanelController();
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1000);
   statusBar.name = 'Token Lens';
