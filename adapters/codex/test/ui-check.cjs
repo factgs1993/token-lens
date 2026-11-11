@@ -20,12 +20,14 @@ const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionI
       await page.setContent('<style>body{margin:0}iframe{width:100%;height:1380px;border:0}</style><iframe></iframe>');
       await page.evaluate(({ html, fixture, theme }) => {
         window.calls = [];
+        window.openedLinks = [];
         window.addEventListener('message', event => {
           const message = event.data;
           if (!message?.method || message.id === undefined) return;
           let result = {};
           if (message.method === 'ui/initialize') result = { protocolVersion: '2026-01-26', hostInfo: { name: 'Codex', version: '26.1029.61003' }, hostCapabilities: { serverTools: {} }, hostContext: { theme, 'openai/deepLink': { url: '/answer?sessionId=session-1&turnId=turn-1' } } };
-          if (message.method === 'tools/call') { window.calls.push(message.params); result = { content: [], structuredContent: { report: fixture, baseUrl: null } }; }
+          if (message.method === 'tools/call') { window.calls.push(message.params); result = { content: [], structuredContent: { report: fixture, baseUrl: 'http://127.0.0.1:38479' } }; }
+          if (message.method === 'ui/open-link') window.openedLinks.push(message.params.url);
           event.source.postMessage({ jsonrpc: '2.0', id: message.id, result }, '*');
         });
         document.querySelector('iframe').srcdoc = html;
@@ -34,6 +36,32 @@ const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionI
       await frame.locator('#total').filter({ hasText: '12 900' }).waitFor({ timeout: 10000 });
       assert.equal(await frame.locator('select').count(), 0);
       assert.equal(await frame.locator('#answer-title img, #prompt-preview img').count(), 0);
+      assert.equal(await frame.locator('#browser-report').count(), 0);
+      assert.equal((await frame.locator('#share-button').textContent()).trim(), '');
+      assert.equal(await frame.locator('#share-button svg').count(), 1);
+      assert.equal(await frame.locator('#share-menu').isVisible(), false);
+      await frame.locator('#share-button').click();
+      assert.equal(await frame.locator('#share-button').getAttribute('aria-expanded'), 'true');
+      assert.equal(await frame.locator('#share-menu [role="menuitem"]:visible').count(), 2);
+      await frame.locator('#download-html').press('ArrowDown');
+      assert.equal(await frame.locator('#download-json').evaluate(el => el === document.activeElement), true);
+      await frame.locator('#download-json').press('Escape');
+      assert.equal(await frame.locator('#share-menu').isVisible(), false);
+      assert.equal(await frame.locator('#share-button').evaluate(el => el === document.activeElement), true);
+      await frame.locator('#share-button').press('ArrowUp');
+      assert.equal(await frame.locator('#download-json').evaluate(el => el === document.activeElement), true);
+      await frame.locator('#download-json').press('Home');
+      assert.equal(await frame.locator('#download-html').evaluate(el => el === document.activeElement), true);
+      await frame.locator('#download-html').press('End');
+      await frame.locator('#download-json').press('Tab');
+      assert.equal(await frame.locator('#share-menu').isVisible(), false);
+      assert.equal(await frame.locator('.prompt > summary').evaluate(el => el === document.activeElement), true);
+      await frame.locator('#share-button').click(); await frame.locator('h1').click();
+      assert.equal(await frame.locator('#share-menu').isVisible(), false);
+      await frame.locator('#share-button').click(); await frame.locator('#download-json').click();
+      await page.waitForFunction(() => window.openedLinks.length === 1);
+      assert.equal((await page.evaluate(() => window.openedLinks))[0], 'http://127.0.0.1:38479/export.json?sessionId=session-1&turnId=turn-1');
+      assert.equal(await frame.locator('#share-menu').isVisible(), false);
       await frame.locator('.prompt > summary').click();
       assert.ok((await frame.locator('#prompt-title').textContent()).includes('321'));
       assert.equal(await frame.locator('#prompt-preview').textContent(), first.prompt.preview);
@@ -52,6 +80,9 @@ const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionI
       assert.deepEqual(calls[0].arguments, { sessionId: 'session-1', turnId: 'turn-1' });
       assert.equal(calls[0].name, 'read_token_report');
       assert.deepEqual(errors, []);
+      await frame.locator('#share-button').click();
+      const menuBounds = await frame.locator('#share-menu').boundingBox();
+      assert.ok(menuBounds.x >= 0 && menuBounds.x + menuBounds.width <= width);
       await page.screenshot({ path: `test/panel-${width}-${theme}.png`, fullPage: true });
       await page.close();
     }
@@ -66,11 +97,18 @@ const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionI
     await page.locator('#total').filter({ hasText: '12 901' }).waitFor({ timeout: 10000 });
     await page.locator('#history > summary').click();
     await page.locator('[data-turn-id="turn-2"]').click();
+    await page.locator('#share-button').click();
     const jsonPending = page.waitForEvent('download'); await page.locator('#download-json').click(); const jsonDownload = await jsonPending;
     assert.equal(JSON.parse(fs.readFileSync(await jsonDownload.path(), 'utf8')).turnId, 'turn-2');
+    await page.locator('#share-button').click();
     const htmlPending = page.waitForEvent('download'); await page.locator('#download-html').click(); const htmlDownload = await htmlPending;
     const offlinePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'token-lens-offline-')), 'report.html');
     await htmlDownload.saveAs(offlinePath);
+    await page.goto(`${base}/answer?sessionId=session-1&turnId=turn-2`);
+    await page.locator('#total').filter({ hasText: '125' }).waitFor();
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.locator('#share-button').click();
+    await page.screenshot({ path: 'test/panel-share-menu.png', clip: { x: 0, y: 0, width: 1100, height: 330 } });
     await page.close();
     const offline = await browser.newPage({ viewport: { width: 1100, height: 1400 } });
     const requests = []; offline.on('request', request => requests.push(request.url())); offline.on('pageerror', error => errors.push(error.message));
@@ -81,12 +119,13 @@ const fixture = { schemaVersion: 1, exportedAt: '2026-11-11T10:00:00Z', sessionI
     assert.equal((await offline.locator('#total').textContent()).replace(/\s/g, ' '), '12 901');
     await offline.locator('.prompt > summary').click();
     assert.equal(await offline.locator('#prompt-preview img').count(), 0);
+    await offline.locator('#share-button').click();
     const offlineJson = offline.waitForEvent('download'); await offline.locator('#download-json').click();
     assert.equal(JSON.parse(fs.readFileSync(await (await offlineJson).path(), 'utf8')).turnId, 'turn-1');
     assert.deepEqual(requests.filter(url => /^https?:/.test(url)), []);
     assert.deepEqual(errors, []);
     await offline.screenshot({ path: 'test/panel-standalone.png', fullPage: true });
     await offline.close();
-    console.log('PASS UI: MCP binding, prompt safety, history/totals, missing counters, mobile layout, live browser updates, HTML/JSON downloads and offline history without network.');
+    console.log('PASS UI: accessible share menu, keyboard/outside dismissal, MCP download handoff, mobile layout, bound HTML/JSON exports, live/offline reports and prompt safety.');
   } finally { await browser.close(); if (server) await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
