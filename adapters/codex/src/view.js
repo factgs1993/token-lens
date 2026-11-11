@@ -1,3 +1,4 @@
+import { renderLimits } from './limits-view.js';
 const $ = id => document.getElementById(id);
 const number = value => Number.isFinite(value) ? value.toLocaleString('ru-RU') : '—';
 const categories = [['schemas','Схемы инструментов','#ab9af5'],['tool_results','Результаты инструментов','#68bdea'],['instructions','Инструкции и каталог скиллов','#e2bd68'],['conversation','История, запрос и контекст','#79c9aa'],['tool_calls','Аргументы вызовов инструментов','#e4a17d']];
@@ -36,6 +37,7 @@ export function createReportView({ getReport, openExternal, live = true }) {
   shareMenu.onkeydown = event => {
     if (event.key === 'Escape') { event.preventDefault(); closeShare(true); return; }
     if (event.key === 'Tab') { closeShare(true); if (event.shiftKey) event.preventDefault(); return; }
+    if (event.key === ' ') { event.preventDefault(); document.activeElement?.click(); return; }
     const items = menuItems(), index = items.indexOf(document.activeElement);
     const next = { ArrowDown: (index + 1) % items.length, ArrowUp: (index - 1 + items.length) % items.length, Home: 0, End: items.length - 1 }[event.key];
     if (next !== undefined) { event.preventDefault(); items[next]?.focus(); }
@@ -51,6 +53,7 @@ export function createReportView({ getReport, openExternal, live = true }) {
     $('status').textContent = `${states[turn.status] || states.unknown} · ${turn.requests.length} запросов модели${turn.hasUsage ? '' : ' · счётчики ещё не записаны'}`;
     $('prompt-title').textContent = turn.prompt ? `Запрос · ${number(turn.prompt.length)} символов${turn.prompt.truncated ? ' · превью до 200' : ''}` : 'Запрос · текст недоступен';
     $('prompt-preview').textContent = turn.prompt?.preview || 'Текст запроса не найден в локальном журнале этого хода.';
+    renderLimits(data.accountLimits, live);
     shareButton.disabled = false;
     $('answer-navigation').hidden = selected === binding.turnId;
     for (const [id, endpoint] of [['download-html','/export.html'],['download-json','/export.json']]) {

@@ -19,6 +19,7 @@
     <div id="content" hidden>
     <nav class="toolbar" id="answer-navigation" aria-label="Навигация по ответам" hidden><button id="return-answer" type="button">К исходному ответу</button></nav>
     <details class="prompt"><summary id="prompt-title">Запрос</summary><pre id="prompt-preview"></pre></details>
+    <details id="quota" class="quota"><summary><span id="quota-title">Лимиты аккаунта</span><span id="quota-summary" class="quota-summary">Получаем данные аккаунта…</span></summary><p id="quota-status" class="muted" role="status"></p><div id="quota-windows"></div><p class="muted">Общий лимит для всех чатов и устройств. Точное число оставшихся запросов не предоставляется; оно зависит от объёма и сложности работы. Проценты не являются расходом выбранного ответа.</p></details>
     <details id="history"><summary>История ходов и итоги чата</summary>
       <section class="metrics" aria-label="Итоги чата"><article class="metric primary"><span>Всего по чату</span><strong id="chat-total">—</strong><small>по записанным счётчикам</small></article><article class="metric"><span>Вход</span><strong id="chat-input">—</strong><small>кэш входит во вход</small></article><article class="metric"><span>Выход</span><strong id="chat-output">—</strong><small>рассуждения входят в выход</small></article></section>
       <p class="muted" id="chat-coverage"></p><div id="turns" class="turns"></div>

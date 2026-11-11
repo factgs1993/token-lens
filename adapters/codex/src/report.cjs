@@ -5,9 +5,10 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { createStore } = require('./usage.cjs');
-const VERSION = '0.2.0';
+const { getAccountLimits } = require('./limits.cjs');
+const VERSION = require('../package.json').version;
 const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
-const metaPath = path.join(home, 'token-lens', 'browser-server.json');
+const metaPath = path.join(home, 'token-lens', `browser-server-${VERSION}.json`);
 
 function renderHtml(report, baseUrl = null, assetDir = __dirname) {
   const data = JSON.stringify({ report, baseUrl }).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -22,7 +23,7 @@ async function healthy(meta) {
     return body.name === 'codex-token-lens' && body.version === VERSION && body.secret === meta.secret;
   } catch { return false; }
 }
-function createReportServer(store = createStore(), assetDir = __dirname) {
+function createReportServer(store = createStore(), assetDir = __dirname, readLimits = getAccountLimits) {
   const secret = crypto.randomBytes(24).toString('hex');
   const server = http.createServer((req, res) => {
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -40,7 +41,7 @@ function createReportServer(store = createStore(), assetDir = __dirname) {
         res.end(JSON.stringify({ name: 'codex-token-lens', version: VERSION, secret })); return;
       }
       if (!['/answer', '/api/report', '/export.json', '/export.html'].includes(url.pathname)) { res.writeHead(404).end('Not found'); return; }
-      const report = store.snapshot(url.searchParams.get('sessionId'), url.searchParams.get('turnId'));
+      const report = { ...store.snapshot(url.searchParams.get('sessionId'), url.searchParams.get('turnId')), accountLimits: readLimits() };
       const json = ['/api/report', '/export.json'].includes(url.pathname);
       res.setHeader('Content-Type', json ? 'application/json; charset=utf-8' : 'text/html; charset=utf-8');
       if (url.pathname.startsWith('/export.')) res.setHeader('Content-Disposition', `attachment; filename="token-lens-${report.sessionId}-${report.turnId}.${json ? 'json' : 'html'}"`);
