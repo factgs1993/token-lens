@@ -8,11 +8,16 @@
 </head>
 <body>
   <main>
-    <header><div><div class="eyebrow">CODEX · ЛОКАЛЬНАЯ СТАТИСТИКА</div><h1>Расход токенов</h1></div><span class="live" id="live">Подключение…</span></header>
+    <header><div><div class="eyebrow">CODEX · ЛОКАЛЬНАЯ СТАТИСТИКА</div><h1>Расход токенов</h1></div><div class="header-actions"><span class="live" id="live">Подключение…</span>
+      <div class="share" id="share">
+        <button id="share-button" class="icon-button" type="button" aria-label="Поделиться" title="Поделиться" aria-haspopup="menu" aria-expanded="false" aria-controls="share-menu" disabled><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></svg></button>
+        <div id="share-menu" class="share-menu" role="menu" aria-label="Экспорт отчёта" hidden><a id="download-html" role="menuitem" tabindex="-1" hidden>Скачать как HTML</a><a id="download-json" href="#" role="menuitem" tabindex="-1">Скачать как JSON</a></div>
+      </div>
+    </div></header>
     <p id="answer-title" class="muted"></p>
     <p id="status" role="status">Подключение к Codex…</p>
     <div id="content" hidden>
-    <nav class="toolbar" aria-label="Отчёт"><a id="browser-report" hidden>HTML в браузере</a><a id="download-html" hidden>Скачать HTML</a><a id="download-json" href="#">Скачать JSON</a><button id="return-answer" type="button" hidden>К исходному ответу</button></nav>
+    <nav class="toolbar" id="answer-navigation" aria-label="Навигация по ответам" hidden><button id="return-answer" type="button">К исходному ответу</button></nav>
     <details class="prompt"><summary id="prompt-title">Запрос</summary><pre id="prompt-preview"></pre></details>
     <details id="history"><summary>История ходов и итоги чата</summary>
       <section class="metrics" aria-label="Итоги чата"><article class="metric primary"><span>Всего по чату</span><strong id="chat-total">—</strong><small>по записанным счётчикам</small></article><article class="metric"><span>Вход</span><strong id="chat-input">—</strong><small>кэш входит во вход</small></article><article class="metric"><span>Выход</span><strong id="chat-output">—</strong><small>рассуждения входят в выход</small></article></section>

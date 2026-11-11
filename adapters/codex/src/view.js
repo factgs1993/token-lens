@@ -18,6 +18,30 @@ function rows(target, items) {
 }
 export function createReportView({ getReport, openExternal, live = true }) {
   let binding, selected, data, baseUrl, loading = false, generation = 0;
+  const share = $('share'), shareButton = $('share-button'), shareMenu = $('share-menu');
+  const menuItems = () => [...shareMenu.querySelectorAll('[role="menuitem"]')].filter(item => !item.hidden);
+  function closeShare(restoreFocus = false) {
+    shareMenu.hidden = true; shareButton.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) shareButton.focus();
+  }
+  function openShare(last = false) {
+    shareMenu.hidden = false; shareButton.setAttribute('aria-expanded', 'true');
+    (last ? menuItems().at(-1) : menuItems()[0])?.focus();
+  }
+  shareButton.onclick = () => { if (shareMenu.hidden) openShare(); else closeShare(true); };
+  shareButton.onkeydown = event => {
+    if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); openShare(event.key === 'ArrowUp'); }
+    if (event.key === 'Escape') closeShare(true);
+  };
+  shareMenu.onkeydown = event => {
+    if (event.key === 'Escape') { event.preventDefault(); closeShare(true); return; }
+    if (event.key === 'Tab') { closeShare(true); if (event.shiftKey) event.preventDefault(); return; }
+    const items = menuItems(), index = items.indexOf(document.activeElement);
+    const next = { ArrowDown: (index + 1) % items.length, ArrowUp: (index - 1 + items.length) % items.length, Home: 0, End: items.length - 1 }[event.key];
+    if (next !== undefined) { event.preventDefault(); items[next]?.focus(); }
+  };
+  document.addEventListener('click', event => { if (!share.contains(event.target)) closeShare(); });
+  share.addEventListener('focusout', event => { if (!share.contains(event.relatedTarget)) closeShare(); });
   function route(endpoint) { return `${baseUrl}${endpoint}?${new URLSearchParams({ sessionId: binding.sessionId, turnId: selected })}`; }
   function render() {
     const turn = data.turns.find(turn => turn.id === selected);
@@ -27,8 +51,9 @@ export function createReportView({ getReport, openExternal, live = true }) {
     $('status').textContent = `${states[turn.status] || states.unknown} · ${turn.requests.length} запросов модели${turn.hasUsage ? '' : ' · счётчики ещё не записаны'}`;
     $('prompt-title').textContent = turn.prompt ? `Запрос · ${number(turn.prompt.length)} символов${turn.prompt.truncated ? ' · превью до 200' : ''}` : 'Запрос · текст недоступен';
     $('prompt-preview').textContent = turn.prompt?.preview || 'Текст запроса не найден в локальном журнале этого хода.';
-    $('return-answer').hidden = selected === binding.turnId;
-    for (const [id, endpoint] of [['browser-report','/answer'],['download-html','/export.html'],['download-json','/export.json']]) {
+    shareButton.disabled = false;
+    $('answer-navigation').hidden = selected === binding.turnId;
+    for (const [id, endpoint] of [['download-html','/export.html'],['download-json','/export.json']]) {
       $(id).hidden = id !== 'download-json' && !baseUrl;
       $(id).href = baseUrl ? route(endpoint) : '#';
     }
@@ -60,7 +85,8 @@ export function createReportView({ getReport, openExternal, live = true }) {
       for (const value of [request.input_tokens, request.cached_input_tokens, request.output_tokens]) { const cell = document.createElement('td'); cell.textContent = number(value); row.append(cell); } return row;
     }));
   }
-  for (const id of ['browser-report','download-html','download-json']) $(id).onclick = async event => {
+  for (const id of ['download-html','download-json']) $(id).onclick = async event => {
+    closeShare(true);
     if (baseUrl) {
       if (openExternal) { event.preventDefault(); try { await openExternal($(id).href); } catch(error) { $('status').textContent = error.message; } }
       return;
@@ -86,6 +112,6 @@ export function createReportView({ getReport, openExternal, live = true }) {
   if (live) setInterval(() => { if (!document.hidden) refresh(); }, 4000);
   return { bind(next) {
     if (binding?.sessionId === next.sessionId && binding?.turnId === next.turnId) return;
-    binding = next; selected = next.turnId; generation++; $('content').hidden = true; refresh();
+    binding = next; selected = next.turnId; generation++; $('content').hidden = true; shareButton.disabled = true; closeShare(); refresh();
   }, refresh };
 }
