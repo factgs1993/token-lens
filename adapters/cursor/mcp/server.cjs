@@ -27,7 +27,7 @@ function panelHtml(payload) {
 }
 
 const server = new McpServer(
-  { name: 'cursor-token-lens', version: '0.3.0' },
+  { name: 'cursor-token-lens', version: '0.3.1' },
   {
     instructions:
       'Ordinary turns: do not call token_usage_panel or read_token_usage. Append the «📊 Аналитика запроса/ответа» link only via answer-link.cjs at the very end of the final text reply. Call token_usage_panel solely when the user explicitly asks for the in-chat panel / «панель». Never invent token counts or conversation IDs.',

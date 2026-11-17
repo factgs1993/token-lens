@@ -297,6 +297,7 @@ function testAnswerMarkdownFlags() {
   const md = buildAnswerMarkdown('http://127.0.0.1:3847/answers/x.html', {
     measured: { input_tokens: 1200, output_tokens: 34, incomplete: false },
     plan_usage: {
+      at: new Date(2026, 10, 17, 13, 56).toISOString(),
       membership: 'pro',
       billing_cycle_end: '2026-12-01T00:00:00.000Z',
       plan: { auto_percent_used: 12.4, api_percent_used: 3.1 },
@@ -304,7 +305,7 @@ function testAnswerMarkdownFlags() {
   });
   assert.match(md, /^\[📊 Аналитика запроса\/ответа\]/);
   assert.equal(md.includes('↓'), false);
-  assert.match(md, /Лимиты:.*Auto 12%/);
+  assert.match(md, /Лимиты 17\.11\.2026 13:56:.*Auto 12%/);
   assert.match(md, /🧊 Контекст: 1% · ок/);
   assert.match(
     formatContextHeatLine({ measured: { input_tokens: 160000 } }, { contextWindowTokens: 200000 }),

@@ -2,6 +2,19 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const lib = require('../scripts/lib.cjs');
 
+test('plan footer dates the saved snapshot and preserves it for cached or stale data', () => {
+  const { formatPlanUsageLine } = require('../scripts/plan-usage.cjs');
+  const usage = { at: new Date(2026, 10, 17, 13, 56).toISOString(), membership: 'pro', plan: { auto_percent_used: 12.4, api_percent_used: 3.1 } };
+  const expected = 'Лимиты 17.11.2026 13:56: pro · Auto 12% · API 3%';
+  assert.equal(formatPlanUsageLine(usage), expected);
+  assert.equal(formatPlanUsageLine({ ...usage, cached: true }), expected);
+  assert.equal(formatPlanUsageLine({ ...usage, cached: true, stale: true }), expected);
+  for (const at of [undefined, null, '', 'invalid']) {
+    assert.equal(formatPlanUsageLine({ ...usage, at }), 'Лимиты: pro · Auto 12% · API 3%');
+  }
+  assert.equal(formatPlanUsageLine(null), 'Лимиты: нет данных');
+});
+
 test('missing measured usage stays unavailable and cache is not added twice', () => {
   assert.equal(lib.measuredFromPayload({}), null);
   const measured = lib.measuredFromPayload({ input_tokens: 100, output_tokens: 20, cache_read_tokens: 30, cache_write_tokens: 10 });

@@ -1,0 +1,43 @@
+{
+  "name": "opencode-token-lens",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Token Lens для OpenCode: HTML-отчёты по ответам, сводка токенов с датой получения данных, индикатор контекста, All Reports / Settings, TUI и desktop.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./rpc": "./src/rpc.js",
+    "./tui": "./src/tui.js",
+    "./gui-experimental": "./src/gui.js"
+  },
+  "files": [
+    "src",
+    "skills",
+    "scripts"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.2.6"
+  },
+  "peerDependencies": {
+    "solid-js": ">=1.9.0",
+    "@opentui/core": ">=0.8.1",
+    "@opentui/solid": ">=0.8.1"
+  },
+  "peerDependenciesMeta": {
+    "solid-js": {
+      "optional": true
+    },
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    }
+  }
+}

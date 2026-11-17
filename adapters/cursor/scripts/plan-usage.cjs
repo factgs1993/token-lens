@@ -338,7 +338,9 @@ function formatPlanUsageLine(planUsage) {
   if (api != null) bits.push(`API ${api.toFixed(0)}%`);
   const resetIso = planUsage.billing_cycle_end || null;
   if (resetIso) bits.push(`сброс ${String(resetIso).slice(0, 10)}`);
-  return bits.length ? `Лимиты: ${bits.join(' · ')}` : 'Лимиты: нет данных';
+  const at = Date.parse(planUsage.at);
+  const timestamp = Number.isFinite(at) ? new Date(at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(', ', ' ') : '';
+  return bits.length ? `Лимиты${timestamp ? ' ' + timestamp : ''}: ${bits.join(' · ')}` : 'Лимиты: нет данных';
 }
 
 function renderPlanBars(planUsage) {
