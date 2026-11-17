@@ -305,7 +305,7 @@ function testAnswerMarkdownFlags() {
   });
   assert.match(md, /^\[📊 Аналитика запроса\/ответа\]/);
   assert.equal(md.includes('↓'), false);
-  assert.match(md, /Лимиты 17\.11\.2026 13:56:.*Auto 12%/);
+  assert.match(md, /Лимиты 17\.11\.2026 13:56:\n- pro\n- Auto 12%\n- API 3%\n\nсброс лимита: 2026-12-01/);
   assert.match(md, /🧊 Контекст: 1% · ок/);
   assert.match(
     formatContextHeatLine({ measured: { input_tokens: 160000 } }, { contextWindowTokens: 200000 }),

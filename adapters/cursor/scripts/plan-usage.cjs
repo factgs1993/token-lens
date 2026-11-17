@@ -330,17 +330,35 @@ function formatPlanUsageLine(planUsage) {
     return 'Лимиты: нет данных';
   }
   const p = planUsage.plan;
-  const bits = [];
+  const items = [];
   const auto = clampPct(p.auto_percent_used);
   const api = clampPct(p.api_percent_used);
-  if (planUsage.membership) bits.push(String(planUsage.membership));
-  if (auto != null) bits.push(`Auto ${auto.toFixed(0)}%`);
-  if (api != null) bits.push(`API ${api.toFixed(0)}%`);
+  if (planUsage.membership) items.push(`- ${String(planUsage.membership)}`);
+  if (auto != null) items.push(`- Auto ${auto.toFixed(0)}%`);
+  if (api != null) items.push(`- API ${api.toFixed(0)}%`);
   const resetIso = planUsage.billing_cycle_end || null;
-  if (resetIso) bits.push(`сброс ${String(resetIso).slice(0, 10)}`);
+  // Blank line before reset: otherwise Markdown folds it into the last list item.
+  const reset = resetIso ? `сброс лимита: ${String(resetIso).slice(0, 10)}` : '';
   const at = Date.parse(planUsage.at);
-  const timestamp = Number.isFinite(at) ? new Date(at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(', ', ' ') : '';
-  return bits.length ? `Лимиты${timestamp ? ' ' + timestamp : ''}: ${bits.join(' · ')}` : 'Лимиты: нет данных';
+  const timestamp = Number.isFinite(at)
+    ? new Date(at)
+        .toLocaleString('ru-RU', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        .replace(', ', ' ')
+    : '';
+  if (!items.length && !reset) return 'Лимиты: нет данных';
+  const header = `Лимиты${timestamp ? ' ' + timestamp : ''}:`;
+  const parts = [header, ...items];
+  if (reset) {
+    if (items.length) parts.push('');
+    parts.push(reset);
+  }
+  return parts.join('\n');
 }
 
 function renderPlanBars(planUsage) {
