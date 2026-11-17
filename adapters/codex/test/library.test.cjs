@@ -79,6 +79,7 @@ test('HTTP catalog, settings and deletion require the same origin and deleted de
 });
 test('footer labels account-wide percentages without invented remaining requests', () => {
   assert.equal(formatFooter(null), 'Лимиты Codex: временно недоступны.');
-  const text = formatFooter({ pools: [{ name: 'Codex', primary: { windowMinutes: 300, remainingPercent: 0 }, secondary: { windowMinutes: 10080, remainingPercent: 40 } }] });
-  assert.equal(text, 'Лимиты аккаунта Codex:\n\n* Осталось 0% (5 ч)\n* Осталось 40% (7 д)\n* Общие для всех чатов.');
+  const limits = { fetchedAt: new Date(2026, 10, 17, 13, 56).toISOString(), pools: [{ name: 'Codex', primary: { windowMinutes: 300, remainingPercent: 0 }, secondary: { windowMinutes: 10080, remainingPercent: 40 } }] };
+  assert.equal(formatFooter(limits), 'Лимиты аккаунта Codex 17.11.2026 13:56:\n\n* Осталось 0% (5 ч)\n* Осталось 40% (7 д)\n* Общие для всех чатов.');
+  assert.ok(formatFooter({ ...limits, fetchedAt: null }).startsWith('Лимиты аккаунта Codex:\n\n'));
 });
